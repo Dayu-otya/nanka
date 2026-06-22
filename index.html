@@ -1,0 +1,5578 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NEON PURGE // Wave Survival</title>
+    <style>
+      :root {
+        --neon-cyan: #00f0ff;
+        --neon-mag: #ff2a8e;
+        --neon-yellow: #f7ff3a;
+        --bg-void: #05060a;
+        --panel-bg: rgba(6, 12, 20, 0.78);
+        --grid-line: rgba(0, 240, 255, 0.12);
+        --danger: #ff3b3b;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg-void);
+        font-family: 'Consolas', 'SF Mono', 'Courier New', monospace;
+        color: #d9f7ff;
+        user-select: none;
+      }
+
+      #game-container {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+
+      canvas {
+        display: block;
+      }
+
+      /* ---------- HUD ---------- */
+      #hud {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 10;
+      }
+
+      .corner-frame {
+        position: absolute;
+        width: 28px;
+        height: 28px;
+        border: 2px solid var(--neon-cyan);
+        opacity: 0.55;
+      }
+      .corner-frame.tl {
+        top: 14px;
+        left: 14px;
+        border-right: none;
+        border-bottom: none;
+      }
+      .corner-frame.tr {
+        top: 14px;
+        right: 14px;
+        border-left: none;
+        border-bottom: none;
+      }
+      .corner-frame.bl {
+        bottom: 14px;
+        left: 14px;
+        border-right: none;
+        border-top: none;
+      }
+      .corner-frame.br {
+        bottom: 14px;
+        right: 14px;
+        border-left: none;
+        border-top: none;
+      }
+
+      #crosshair {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 22px;
+        height: 22px;
+        transform: translate(-50%, -50%);
+      }
+      #crosshair::before,
+      #crosshair::after {
+        content: '';
+        position: absolute;
+        background: var(--neon-cyan);
+        box-shadow: 0 0 6px var(--neon-cyan);
+      }
+      #crosshair::before {
+        left: 50%;
+        top: 0;
+        width: 2px;
+        height: 100%;
+        transform: translateX(-50%);
+      }
+      #crosshair::after {
+        top: 50%;
+        left: 0;
+        height: 2px;
+        width: 100%;
+        transform: translateY(-50%);
+      }
+      #crosshair .dot {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 3px;
+        height: 3px;
+        background: var(--neon-mag);
+        transform: translate(-50%, -50%);
+        box-shadow: 0 0 8px var(--neon-mag);
+      }
+      #crosshair.hit-flash::before,
+      #crosshair.hit-flash::after {
+        background: var(--neon-yellow);
+        box-shadow: 0 0 10px var(--neon-yellow);
+      }
+
+      #scope-overlay {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.12s ease;
+        z-index: 9;
+      }
+      #scope-overlay.active {
+        opacity: 1;
+      }
+
+      #scope-overlay .scope-mask {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+          circle 260px at center,
+          transparent 0%,
+          transparent 50%,
+          rgba(0, 0, 0, 0.15) 60%,
+          rgba(0, 0, 0, 0.35) 100%
+        );
+      }
+      /* レンズ内の薄いブルーグリーン色収差 */
+      #scope-overlay .scope-lens {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+          circle 200px at center,
+          rgba(0, 240, 255, 0.04) 0%,
+          rgba(0, 180, 200, 0.02) 35%,
+          transparent 38%
+        );
+      }
+      /* 十字線 */
+      #scope-overlay .scope-cross-h,
+      #scope-overlay .scope-cross-v {
+        position: absolute;
+        background: rgba(0, 240, 255, 0.85);
+        box-shadow: 0 0 4px rgba(0, 240, 255, 0.6);
+      }
+      #scope-overlay .scope-cross-h {
+        top: 50%;
+        left: 50%;
+        width: 320px;
+        height: 1px;
+        transform: translate(-50%, -50%);
+      }
+      #scope-overlay .scope-cross-v {
+        top: 50%;
+        left: 50%;
+        width: 1px;
+        height: 320px;
+        transform: translate(-50%, -50%);
+      }
+      /* 中央の空白（中抜き） */
+      #scope-overlay .scope-center-gap-h {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 28px;
+        height: 1px;
+        transform: translate(-50%, -50%);
+        background: transparent;
+        box-shadow: none;
+        /* 左右の線の中央を消すためのオーバーレイ */
+        background: rgba(2, 5, 10, 0.96);
+      }
+      /* ミル(目盛り)ドット */
+      #scope-overlay .mil {
+        position: absolute;
+        width: 3px;
+        height: 3px;
+        background: rgba(0, 240, 255, 0.7);
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+      }
+      /* レンズ縁のリング */
+      #scope-overlay .scope-ring {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 400px;
+        height: 400px;
+        border-radius: 50%;
+        border: 31px solid rgba(34, 36, 36, 0.5);
+        transform: translate(-50%, -50%);
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.8),
+          inset 0 0 20px rgba(0, 240, 255, 0.06);
+      }
+      /* スコープ中はデフォルトクロスヘアを非表示 */
+      #scope-overlay.active ~ #crosshair,
+      .scoped #crosshair {
+        display: none;
+      }
+
+      /* 左下: HP / シールド */
+      #status-panel {
+        position: absolute;
+        bottom: 26px;
+        left: 26px;
+        background: var(--panel-bg);
+        border: 1px solid rgba(0, 240, 255, 0.35);
+        padding: 12px 16px;
+        min-width: 230px;
+        clip-path: polygon(
+          0 0,
+          100% 0,
+          100% 100%,
+          12px 100%,
+          0 calc(100% - 12px)
+        );
+      }
+      .stat-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 7px;
+      }
+      .stat-row:last-child {
+        margin-bottom: 0;
+      }
+      .stat-label {
+        font-size: 11px;
+        letter-spacing: 2px;
+        width: 38px;
+        color: rgba(217, 247, 255, 0.65);
+      }
+      .bar-track {
+        flex: 1;
+        height: 12px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        position: relative;
+        overflow: hidden;
+      }
+      .bar-fill {
+        height: 100%;
+        transition: width 0.18s ease-out;
+      }
+      #hp-fill {
+        background: linear-gradient(90deg, #ff2a8e, #ff6b6b);
+        box-shadow: 0 0 8px rgba(255, 42, 142, 0.6);
+      }
+      #shield-fill {
+        background: linear-gradient(90deg, #00f0ff, #6bf1ff);
+        box-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+      }
+      .stat-num {
+        font-size: 11px;
+        width: 32px;
+        text-align: right;
+        color: rgba(217, 247, 255, 0.8);
+      }
+
+      /* 右下: 弾薬 */
+      #ammo-panel {
+        position: absolute;
+        bottom: 26px;
+        right: 26px;
+        background: var(--panel-bg);
+        border: 1px solid rgba(0, 240, 255, 0.35);
+        padding: 10px 18px;
+        text-align: right;
+        clip-path: polygon(12px 0, 100% 0, 100% 100%, 0 100%, 0 12px);
+      }
+      #ammo-current {
+        font-size: 34px;
+        color: var(--neon-cyan);
+        text-shadow: 0 0 10px rgba(0, 240, 255, 0.7);
+        letter-spacing: 1px;
+      }
+      #ammo-reserve {
+        font-size: 13px;
+        color: rgba(217, 247, 255, 0.5);
+      }
+      #weapon-name {
+        font-size: 10px;
+        letter-spacing: 3px;
+        color: rgba(255, 42, 142, 0.85);
+        margin-top: 2px;
+      }
+      #reload-indicator {
+        font-size: 11px;
+        color: var(--neon-yellow);
+        letter-spacing: 2px;
+        margin-top: 4px;
+        opacity: 0;
+      }
+      #reload-indicator.show {
+        opacity: 1;
+        animation: blink 0.5s steps(2) infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0.2;
+        }
+      }
+
+      #weapon-slots {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-end;
+        margin-top: 8px;
+      }
+      .wslot {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 7px;
+        border: 1px solid rgba(217, 247, 255, 0.18);
+        background: rgba(255, 255, 255, 0.03);
+        opacity: 0.35;
+        transition: all 0.15s ease;
+      }
+      .wslot-key {
+        font-size: 10px;
+        color: rgba(217, 247, 255, 0.6);
+        border: 1px solid rgba(217, 247, 255, 0.3);
+        width: 13px;
+        height: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 2px;
+      }
+      .wslot-label {
+        font-size: 9px;
+        letter-spacing: 1px;
+        color: rgba(217, 247, 255, 0.55);
+      }
+      .wslot.owned {
+        opacity: 0.75;
+        border-color: rgba(0, 240, 255, 0.35);
+      }
+      .wslot.active {
+        opacity: 1;
+        border-color: var(--neon-cyan);
+        box-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+      }
+      .wslot.active .wslot-key {
+        color: var(--neon-cyan);
+        border-color: var(--neon-cyan);
+      }
+      .wslot.active .wslot-label {
+        color: var(--neon-cyan);
+      }
+
+      .kill-msg.pickup-msg {
+        color: var(--neon-cyan);
+      }
+
+      /* 上部中央: ウェーブ情報 */
+      #wave-panel {
+        position: absolute;
+        top: 22px;
+        left: 50%;
+        transform: translateX(-50%);
+        text-align: center;
+      }
+      #wave-label {
+        font-size: 12px;
+        letter-spacing: 4px;
+        color: rgba(217, 247, 255, 0.55);
+      }
+      #wave-number {
+        font-size: 26px;
+        color: var(--neon-yellow);
+        text-shadow: 0 0 12px rgba(247, 255, 58, 0.6);
+        letter-spacing: 2px;
+      }
+      #enemies-left {
+        font-size: 12px;
+        color: rgba(217, 247, 255, 0.7);
+        margin-top: 2px;
+        letter-spacing: 1px;
+      }
+
+      /* 左上: スコア */
+      #score-panel {
+        position: absolute;
+        top: 22px;
+        left: 26px;
+        font-size: 13px;
+        letter-spacing: 2px;
+        color: rgba(217, 247, 255, 0.75);
+      }
+      #score-value {
+        color: var(--neon-cyan);
+        font-size: 16px;
+        text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+      }
+
+      /* ダメージビネット */
+      #damage-vignette {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+          ellipse at center,
+          transparent 55%,
+          rgba(255, 40, 40, 0.55) 100%
+        );
+        opacity: 0;
+        transition: opacity 0.4s ease-out;
+      }
+
+      /* 低HP時の脈動 */
+      #low-hp-pulse {
+        position: absolute;
+        inset: 0;
+        background: radial-gradient(
+          ellipse at center,
+          transparent 40%,
+          rgba(255, 20, 20, 0.35) 100%
+        );
+        opacity: 0;
+      }
+      #low-hp-pulse.active {
+        animation: pulse-warn 1.1s ease-in-out infinite;
+      }
+      @keyframes pulse-warn {
+        0%,
+        100% {
+          opacity: 0.15;
+        }
+        50% {
+          opacity: 0.55;
+        }
+      }
+
+      /* キルフィード */
+      #kill-feed {
+        position: absolute;
+        top: 70px;
+        right: 26px;
+        width: 200px;
+        text-align: right;
+      }
+      .kill-msg {
+        font-size: 12px;
+        color: var(--neon-yellow);
+        opacity: 0;
+        margin-bottom: 4px;
+        animation: kill-fade 2.2s ease-out forwards;
+      }
+      @keyframes kill-fade {
+        0% {
+          opacity: 0;
+          transform: translateX(10px);
+        }
+        15% {
+          opacity: 1;
+          transform: translateX(0);
+        }
+        75% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+        }
+      }
+
+      /* ---------- オーバーレイ画面 ---------- */
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(10, 16, 28, 0.92) 0%,
+          rgba(2, 4, 8, 0.97) 100%
+        );
+        z-index: 50;
+        text-align: center;
+      }
+      .hidden {
+        display: none !important;
+      }
+
+      .grid-backdrop {
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(var(--grid-line) 1px, transparent 1px),
+          linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+        background-size: 42px 42px;
+        -webkit-mask-image: radial-gradient(
+          ellipse 80% 60% at center,
+          black 0%,
+          transparent 75%
+        );
+        mask-image: radial-gradient(
+          ellipse 80% 60% at center,
+          black 0%,
+          transparent 75%
+        );
+        z-index: -1;
+      }
+
+      .title-main {
+        font-size: 58px;
+        font-weight: 700;
+        letter-spacing: 10px;
+        color: #fff;
+        text-shadow: 0 0 12px var(--neon-cyan), 0 0 30px var(--neon-cyan),
+          0 0 2px #fff;
+        margin-bottom: 6px;
+      }
+      .title-sub {
+        font-size: 14px;
+        letter-spacing: 8px;
+        color: var(--neon-mag);
+        text-shadow: 0 0 10px rgba(255, 42, 142, 0.7);
+        margin-bottom: 40px;
+      }
+
+      .btn-neon {
+        pointer-events: auto;
+        background: transparent;
+        border: 1px solid var(--neon-cyan);
+        color: var(--neon-cyan);
+        font-family: inherit;
+        font-size: 15px;
+        letter-spacing: 4px;
+        padding: 14px 46px;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.15s ease;
+        clip-path: polygon(
+          10px 0,
+          100% 0,
+          100% calc(100% - 10px),
+          calc(100% - 10px) 100%,
+          0 100%,
+          0 10px
+        );
+      }
+      .btn-neon:hover {
+        background: rgba(0, 240, 255, 0.12);
+        box-shadow: 0 0 18px rgba(0, 240, 255, 0.5);
+      }
+
+      .info-block {
+        margin-top: 36px;
+        display: flex;
+        gap: 36px;
+        font-size: 12px;
+        letter-spacing: 1px;
+        color: rgba(217, 247, 255, 0.6);
+      }
+      .info-block .key {
+        display: inline-block;
+        border: 1px solid rgba(217, 247, 255, 0.4);
+        padding: 2px 8px;
+        margin-right: 6px;
+        border-radius: 3px;
+        color: #fff;
+      }
+
+      #result-title {
+        font-size: 42px;
+        letter-spacing: 6px;
+        margin-bottom: 18px;
+      }
+      #result-title.win {
+        color: var(--neon-yellow);
+        text-shadow: 0 0 20px rgba(247, 255, 58, 0.7);
+      }
+      #result-title.lose {
+        color: var(--danger);
+        text-shadow: 0 0 20px rgba(255, 59, 59, 0.7);
+      }
+
+      .result-stats {
+        font-size: 14px;
+        letter-spacing: 2px;
+        color: rgba(217, 247, 255, 0.8);
+        margin-bottom: 36px;
+        line-height: 1.8;
+      }
+      .result-stats span {
+        color: var(--neon-cyan);
+      }
+
+      #wave-clear-banner {
+        position: absolute;
+        top: 38%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        z-index: 40;
+        opacity: 0;
+        pointer-events: none;
+      }
+      #wave-clear-banner.show {
+        animation: wave-clear-anim 2s ease-out forwards;
+      }
+      @keyframes wave-clear-anim {
+        0% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(0.85);
+        }
+        20% {
+          opacity: 1;
+          transform: translate(-50%, -50%) scale(1);
+        }
+        80% {
+          opacity: 1;
+        }
+        100% {
+          opacity: 0;
+          transform: translate(-50%, -50%) scale(1);
+        }
+      }
+      #wave-clear-banner .txt1 {
+        font-size: 30px;
+        letter-spacing: 6px;
+        color: var(--neon-yellow);
+        text-shadow: 0 0 16px rgba(247, 255, 58, 0.7);
+      }
+      #wave-clear-banner .txt2 {
+        font-size: 12px;
+        letter-spacing: 4px;
+        color: rgba(217, 247, 255, 0.7);
+        margin-top: 6px;
+      }
+
+      #loading-bar-track {
+        width: 280px;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        margin-top: 24px;
+      }
+      #loading-bar-fill {
+        height: 100%;
+        width: 0%;
+        background: var(--neon-cyan);
+        box-shadow: 0 0 10px var(--neon-cyan);
+        transition: width 0.2s ease;
+      }
+      /* ---------- ショップ画面 ---------- */
+      #shop-screen .grid-backdrop {
+        opacity: 0.25;
+      }
+      #shop-content {
+        width: min(900px, 92vw);
+        max-height: 80vh;
+        overflow-y: auto;
+        pointer-events: auto;
+        padding: 20px 10px;
+      }
+      #shop-credits-display {
+        font-size: 16px;
+        letter-spacing: 2px;
+        color: var(--neon-yellow);
+        text-shadow: 0 0 10px rgba(247, 255, 58, 0.6);
+        margin-bottom: 22px;
+      }
+      .shop-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: 14px;
+        margin-bottom: 24px;
+      }
+      .shop-card {
+        background: var(--panel-bg);
+        border: 1px solid rgba(0, 240, 255, 0.3);
+        padding: 14px 16px;
+        text-align: left;
+        clip-path: polygon(
+          10px 0,
+          100% 0,
+          100% calc(100% - 10px),
+          calc(100% - 10px) 100%,
+          0 100%,
+          0 10px
+        );
+      }
+      .shop-card-title {
+        font-size: 13px;
+        letter-spacing: 2px;
+        color: var(--neon-cyan);
+        margin-bottom: 6px;
+      }
+      .shop-card-desc {
+        font-size: 11px;
+        color: rgba(217, 247, 255, 0.6);
+        letter-spacing: 1px;
+        margin-bottom: 10px;
+        line-height: 1.5;
+      }
+      .shop-level-dots {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 10px;
+      }
+      .shop-level-dots .dot-pip {
+        width: 16px;
+        height: 5px;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+      .shop-level-dots .dot-pip.filled {
+        background: var(--neon-cyan);
+        border-color: var(--neon-cyan);
+        box-shadow: 0 0 6px rgba(0, 240, 255, 0.6);
+      }
+      .shop-buy-btn {
+        pointer-events: auto;
+        width: 100%;
+        background: transparent;
+        border: 1px solid var(--neon-mag);
+        color: var(--neon-mag);
+        font-family: inherit;
+        font-size: 12px;
+        letter-spacing: 2px;
+        padding: 9px 0;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .shop-buy-btn:hover:not(:disabled) {
+        background: rgba(255, 42, 142, 0.12);
+        box-shadow: 0 0 12px rgba(255, 42, 142, 0.5);
+      }
+      .shop-buy-btn:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+        border-color: rgba(217, 247, 255, 0.25);
+        color: rgba(217, 247, 255, 0.4);
+      }
+      .shop-buy-btn.maxed {
+        border-color: var(--neon-yellow);
+        color: var(--neon-yellow);
+        opacity: 0.7;
+      }
+      #shop-close-btn {
+        margin-top: 4px;
+      }
+
+      /* HOME画面のSHOPボタン配置用 */
+      .home-btn-row {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 0;
+      }
+
+      /* HUD: 所持金表示(score-panelの下に追加) */
+      #credits-panel {
+        margin-top: 8px;
+        font-size: 13px;
+        letter-spacing: 2px;
+        color: rgba(217, 247, 255, 0.75);
+      }
+      #credits-value {
+        color: var(--neon-yellow);
+        font-size: 16px;
+        text-shadow: 0 0 8px rgba(247, 255, 58, 0.5);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container">
+      <div id="hud">
+        <div class="corner-frame tl"></div>
+        <div class="corner-frame tr"></div>
+        <div class="corner-frame bl"></div>
+        <div class="corner-frame br"></div>
+
+        <!-- スコープオーバーレイ -->
+        <div id="scope-overlay">
+          <div class="scope-mask"></div>
+          <div class="scope-lens"></div>
+          <div class="scope-ring"></div>
+          <div class="scope-cross-h"></div>
+          <div class="scope-cross-v"></div>
+          <div class="scope-center-gap-h"></div>
+          <!-- ミルドット(目盛り): 上下左右 各2点 -->
+          <div class="mil" style="top: calc(50% - 60px); left: 50%"></div>
+          <div class="mil" style="top: calc(50% - 120px); left: 50%"></div>
+          <div class="mil" style="top: calc(50% + 60px); left: 50%"></div>
+          <div class="mil" style="top: calc(50% + 120px); left: 50%"></div>
+          <div class="mil" style="top: 50%; left: calc(50% - 60px)"></div>
+          <div class="mil" style="top: 50%; left: calc(50% + 60px)"></div>
+        </div>
+
+        <div id="crosshair"><div class="dot"></div></div>
+
+        <div id="status-panel">
+          <div class="stat-row">
+            <span class="stat-label">HP</span>
+            <div class="bar-track">
+              <div id="hp-fill" class="bar-fill" style="width: 100%"></div>
+            </div>
+            <span class="stat-num" id="hp-num">100</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">SHLD</span>
+            <div class="bar-track">
+              <div id="shield-fill" class="bar-fill" style="width: 100%"></div>
+            </div>
+            <span class="stat-num" id="shield-num">100</span>
+          </div>
+        </div>
+
+        <div id="ammo-panel">
+          <div>
+            <span id="ammo-current">12</span> /
+            <span id="ammo-reserve">84</span>
+          </div>
+          <div id="weapon-name">PULSE RIFLE</div>
+          <div id="reload-indicator">RELOADING</div>
+          <div id="weapon-slots">
+            <div class="wslot" data-slot="1">
+              <span class="wslot-key">1</span
+              ><span class="wslot-label">RIFLE</span>
+            </div>
+            <div class="wslot" data-slot="2">
+              <span class="wslot-key">2</span
+              ><span class="wslot-label">SIDEARM</span>
+            </div>
+            <div class="wslot" data-slot="3">
+              <span class="wslot-key">3</span
+              ><span class="wslot-label">SCATTER</span>
+            </div>
+            <div class="wslot" data-slot="4">
+              <span class="wslot-key">4</span
+              ><span class="wslot-label">SNIPER</span>
+            </div>
+          </div>
+          <div
+            id="grenade-row"
+            class="wslot owned"
+            style="margin-top: 6px; justify-content: flex-end"
+          >
+            <span class="wslot-key">G</span>
+            <span class="wslot-label">GRENADE</span>
+            <span
+              id="grenade-count"
+              style="
+                color: var(--neon-yellow);
+                font-size: 11px;
+                margin-left: 4px;
+              "
+              >2</span
+            >
+          </div>
+        </div>
+
+        <div id="wave-panel">
+          <div id="wave-label">WAVE</div>
+          <div id="wave-number">1</div>
+          <div id="enemies-left">残り敵数: 8</div>
+        </div>
+
+        <div id="score-panel">SCORE<br /><span id="score-value">0</span></div>
+
+        <div id="credits-panel">
+          CREDITS<br /><span id="credits-value">0</span>
+        </div>
+
+        <div id="kill-feed"></div>
+
+        <div id="damage-vignette"></div>
+        <div id="low-hp-pulse"></div>
+      </div>
+
+      <div id="wave-clear-banner">
+        <div class="txt1">WAVE CLEAR</div>
+        <div class="txt2">次のウェーブを準備中…</div>
+      </div>
+
+      <!-- スタート画面 -->
+      <div id="start-screen" class="overlay">
+        <div class="grid-backdrop"></div>
+        <div class="title-main">NEON PURGE</div>
+        <div class="title-sub">WAVE SURVIVAL PROTOCOL</div>
+        <div class="home-btn-row">
+          <button id="start-btn" class="btn-neon">START MISSION</button>
+          <button
+            id="shop-open-btn"
+            class="btn-neon"
+            style="border-color: var(--neon-mag); color: var(--neon-mag)"
+          >
+            SHOP
+          </button>
+        </div>
+        <div class="info-block">
+          <div><span class="key">W A S D</span>移動</div>
+          <div><span class="key">マウス</span>視点</div>
+          <div><span class="key">クリック</span>射撃</div>
+          <div><span class="key">R</span>リロード</div>
+          <div><span class="key">SHIFT</span>ダッシュ</div>
+          <div><span class="key">SPACE</span>ジャンプ</div>
+          <div><span class="key">V</span>近接攻撃</div>
+          <div><span class="key">1 2 3</span>武器切替</div>
+          <div><span class="key">G</span>グレネード投擲</div>
+          <div><span class="key">ホイール</span>武器切替</div>
+        </div>
+        <div
+          class="title-sub"
+          style="
+            margin-top: 22px;
+            font-size: 11px;
+            letter-spacing: 3px;
+            margin-bottom: 0;
+          "
+        >
+          武器クレートを拾って SIDEARM / SCATTER GUN を入手しよう
+        </div>
+        <div
+          class="title-sub"
+          style="
+            margin-top: 8px;
+            font-size: 11px;
+            letter-spacing: 3px;
+            margin-bottom: 0;
+            color: var(--danger);
+          "
+        >
+          グレネードは近距離で投げると自分も被弾するので注意
+        </div>
+      </div>
+
+      <!-- 結果画面 -->
+      <div id="result-screen" class="overlay hidden">
+        <div class="grid-backdrop"></div>
+        <div id="result-title">MISSION FAILED</div>
+        <div class="result-stats">
+          到達ウェーブ: <span id="final-wave">1</span><br />
+          撃破数: <span id="final-kills">0</span><br />
+          最終スコア: <span id="final-score">0</span>
+        </div>
+        <button id="restart-btn" class="btn-neon">RETRY</button>
+      </div>
+
+      <!-- ショップ画面 -->
+      <div id="shop-screen" class="overlay hidden">
+        <div class="grid-backdrop"></div>
+        <div id="shop-content">
+          <div class="title-sub" style="margin-bottom: 6px">
+            武器・装備ショップ
+          </div>
+          <div id="shop-credits-display">
+            所持クレジット: <span id="shop-credits-num">0</span>
+          </div>
+          <div id="shop-grid-container" class="shop-grid">
+            <!-- JSで動的生成 -->
+          </div>
+          <button id="shop-close-btn" class="btn-neon">閉じる</button>
+        </div>
+      </div>
+
+      <!-- ポインターロック誘導 -->
+      <div id="pause-screen" class="overlay hidden">
+        <div class="grid-backdrop"></div>
+        <div class="title-sub" style="margin-bottom: 24px">一時停止中</div>
+        <button id="resume-btn" class="btn-neon">クリックして再開</button>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+      // =========================================================
+      // NEON PURGE - Wave Survival FPS
+      // three.js r128 / 単一ファイル構成
+      // =========================================================
+
+      (() => {
+        'use strict';
+
+        // ---------- グローバル状態 ----------
+        const state = {
+          running: false,
+          paused: false,
+          gameOver: false,
+          keys: {},
+          mouseDown: false,
+          pointerLocked: false,
+          score: 0,
+          kills: 0,
+          wave: 0,
+          waveActive: false,
+          enemiesAlive: 0,
+          enemiesToSpawn: 0,
+          spawnTimer: 0,
+          waveBreakTimer: 0,
+          isADS: false,
+          triggerLocked: false,
+          shopOpenedFromHome: false,
+        };
+
+        const player = {
+          hp: 100,
+          maxHp: 100,
+          shield: 100,
+          maxShield: 100,
+          shieldRegenDelay: 0,
+          speed: 9.0,
+          sprintMult: 1.6,
+          height: 1.7,
+          velocity: new THREE.Vector3(),
+          onGround: true,
+          canJump: true,
+          yVelocity: 0,
+          radius: 0.45,
+
+          jumpCount: 0,
+          maxJumps: 2,
+
+          stepHeight: 1.0,
+
+          stepTargetY: null,
+
+          grenades: 2,
+          credits: 0,
+        };
+
+        const GRAVITY = -24.0;
+
+        // ---------- グレネード設定 ----------
+        const GRENADE_DEF = {
+          throwSpeed: 16, // 投げる初速
+          throwUpward: 4.5, // 上向き初速(放物線の山を作る)
+          gravity: -18.0, // グレネード専用の重力(銃弾と違い物理的に飛ばすため)
+          fuseTime: 1.6, // 投げてから起爆までの秒数
+          bounceDamping: 0.45, // 地面/壁にぶつかった時の減速率
+          explosionRadius: 6.0, // 爆発の有効半径
+          maxDamage: 120, // 中心地点での最大ダメージ
+          minDamageRatio: 0.15, // 半径いっぱいでも残る最低ダメージ割合
+          throwCooldown: 0.6, // 連続投擲の間隔
+          maxCarry: 500, // 所持上限
+        };
+
+        let grenadeThrowCooldown = 0;
+        const activeGrenades = []; // 飛行中/起爆待ちのグレネード { mesh, velocity, fuse, exploded }
+        const grenadeCrates = []; // 弾薬クレートと同様の補充アイテム
+        const grenadeSpawnState = { timer: 12.0, interval: [30, 55] };
+
+        // 武器の「種類」の定義（固定スペック）
+        const WEAPON_DEFS = {
+          rifle: {
+            name: 'PULSE RIFLE',
+            magSize: 24,
+            fireRate: 0.11,
+            reloadTime: 1.6,
+            damage: 24,
+            spread: 0.012,
+            range: 80,
+            pelletCount: 1, // 1発で何粒飛ぶか(ショットガン用)
+            automatic: true, // 押しっぱなしで連射できるか
+            meleeDamage: 55,
+            meleeRange: 1.8,
+            meleeCooldown: 0.7,
+            adsFov: 30,
+            hasScope: true,
+            crateColor: 0x00f0ff,
+          },
+          pistol: {
+            name: 'SIDEARM',
+            magSize: 12,
+            fireRate: 0.18,
+            reloadTime: 1.2,
+            damage: 20,
+            spread: 0.008,
+            range: 60,
+            pelletCount: 1,
+            automatic: false, // セミオート(クリック毎に1発)
+            meleeDamage: 55,
+            meleeRange: 1.8,
+            meleeCooldown: 0.7,
+            adsFov: 55,
+            hasScope: false,
+            crateColor: 0xf7ff3a,
+          },
+          shotgun: {
+            name: 'SCATTER GUN',
+            magSize: 6,
+            fireRate: 0.75,
+            reloadTime: 2.2,
+            damage: 9, // 1粒あたりのダメージ(複数粒命中で大きくなる)
+            spread: 0.09,
+            range: 22,
+            pelletCount: 8, // 1トリガーで8粒
+            automatic: false,
+            meleeDamage: 55,
+            meleeRange: 1.8,
+            meleeCooldown: 0.7,
+            adsFov: 60,
+            hasScope: false,
+            crateColor: 0xff2a8e,
+          },
+          sniper: {
+            name: 'M24 SNIPER',
+            magSize: 5,
+            fireRate: 1.4,
+            reloadTime: 2.6,
+            damage: 110,
+            spread: 0.001,
+            range: 150,
+            pelletCount: 1,
+            automatic: false,
+            meleeDamage: 55,
+            meleeRange: 1.8,
+            meleeCooldown: 0.7,
+            adsFov: 12,
+            hasScope: true,
+            crateColor: 0xc9a227,
+          },
+        };
+
+        // 武器スロット表示順(数字キーに対応)
+        const WEAPON_SLOT_ORDER = ['rifle', 'pistol', 'shotgun', 'sniper'];
+
+        // ====================== ショップ / アップグレードシステム ======================
+
+        // 各アップグレード項目: レベル0(未購入)〜3。レベルごとの価格と効果値を定義
+        const SHOP_UPGRADES = {
+          rifle_dmg: {
+            label: 'PULSE RIFLE DMG',
+            desc: 'ライフルのダメージを強化',
+            maxLv: 3,
+            basePrice: 150,
+            priceMult: 1.8,
+            kind: 'weaponDamage',
+            weapon: 'rifle',
+            perLevel: [6, 6, 8],
+          },
+          rifle_reload: {
+            label: 'PULSE RIFLE RELOAD',
+            desc: 'ライフルのリロード時間を短縮',
+            maxLv: 3,
+            basePrice: 120,
+            priceMult: 1.8,
+            kind: 'weaponReload',
+            weapon: 'rifle',
+            perLevel: [0.25, 0.25, 0.3],
+          },
+          pistol_dmg: {
+            label: 'SIDEARM DMG',
+            desc: 'サイドアームのダメージを強化',
+            maxLv: 3,
+            basePrice: 100,
+            priceMult: 1.8,
+            kind: 'weaponDamage',
+            weapon: 'pistol',
+            perLevel: [5, 5, 6],
+          },
+          pistol_reload: {
+            label: 'SIDEARM RELOAD',
+            desc: 'サイドアームのリロード時間を短縮',
+            maxLv: 3,
+            basePrice: 90,
+            priceMult: 1.8,
+            kind: 'weaponReload',
+            weapon: 'pistol',
+            perLevel: [0.2, 0.2, 0.2],
+          },
+          shotgun_dmg: {
+            label: 'SCATTER GUN DMG',
+            desc: 'ショットガンの1粒ダメージを強化',
+            maxLv: 3,
+            basePrice: 140,
+            priceMult: 1.8,
+            kind: 'weaponDamage',
+            weapon: 'shotgun',
+            perLevel: [2, 2, 3],
+          },
+          shotgun_reload: {
+            label: 'SCATTER GUN RELOAD',
+            desc: 'ショットガンのリロード時間を短縮',
+            maxLv: 3,
+            basePrice: 110,
+            priceMult: 1.8,
+            kind: 'weaponReload',
+            weapon: 'shotgun',
+            perLevel: [0.3, 0.3, 0.4],
+          },
+          sniper_dmg: {
+            label: 'M24 SNIPER DMG',
+            desc: 'スナイパーのダメージを強化',
+            maxLv: 3,
+            basePrice: 220,
+            priceMult: 1.9,
+            kind: 'weaponDamage',
+            weapon: 'sniper',
+            perLevel: [15, 15, 20],
+          },
+          sniper_reload: {
+            label: 'M24 SNIPER RELOAD',
+            desc: 'スナイパーのリロード時間を短縮',
+            maxLv: 3,
+            basePrice: 160,
+            priceMult: 1.8,
+            kind: 'weaponReload',
+            weapon: 'sniper',
+            perLevel: [0.4, 0.4, 0.4],
+          },
+          max_hp: {
+            label: 'MAX HP',
+            desc: '最大HPを増加',
+            maxLv: 3,
+            basePrice: 180,
+            priceMult: 1.9,
+            kind: 'maxHp',
+            perLevel: [20, 20, 25],
+          },
+          max_shield: {
+            label: 'MAX SHIELD',
+            desc: '最大シールドを増加',
+            maxLv: 3,
+            basePrice: 180,
+            priceMult: 1.9,
+            kind: 'maxShield',
+            perLevel: [20, 20, 25],
+          },
+          grenade_cap: {
+            label: 'GRENADE CAPACITY',
+            desc: 'グレネード所持上限を増加',
+            maxLv: 3,
+            basePrice: 130,
+            priceMult: 1.7,
+            kind: 'grenadeCap',
+            perLevel: [2, 2, 3],
+          },
+        };
+
+        // 現在の購入済みレベル(セッション内で永続。defaultは全て0)
+        let shopLevels = {};
+        for (const key in SHOP_UPGRADES) shopLevels[key] = 0;
+
+        // このレベルを買うのに必要な価格を計算
+        function getUpgradePrice(key) {
+          const def = SHOP_UPGRADES[key];
+          const lv = shopLevels[key]; // 次に買うレベル(0始まり)
+          if (lv >= def.maxLv) return null; // 最大到達
+          return Math.round(def.basePrice * Math.pow(def.priceMult, lv));
+        }
+
+        // 購入処理: 成功したらtrue
+        function purchaseUpgrade(key) {
+          const def = SHOP_UPGRADES[key];
+          const lv = shopLevels[key];
+          if (lv >= def.maxLv) return false;
+          const price = getUpgradePrice(key);
+          if (player.credits < price) return false;
+
+          player.credits -= price;
+          shopLevels[key] = lv + 1;
+          applyUpgradeEffect(key, def, lv); // lvは購入前のレベル(0-indexed段階)
+          updateCreditsUI();
+          return true;
+        }
+
+        // 効果を実際のゲーム数値へ反映
+        function applyUpgradeEffect(key, def, prevLv) {
+          const amount = def.perLevel[prevLv];
+          switch (def.kind) {
+            case 'weaponDamage':
+              WEAPON_DEFS[def.weapon].damage += amount;
+              break;
+            case 'weaponReload':
+              WEAPON_DEFS[def.weapon].reloadTime = Math.max(
+                0.4,
+                WEAPON_DEFS[def.weapon].reloadTime - amount
+              );
+              break;
+            case 'maxHp':
+              player.maxHp += amount;
+              player.hp += amount; // 購入直後も即時反映(回復扱い)
+              break;
+            case 'maxShield':
+              player.maxShield += amount;
+              player.shield += amount;
+              break;
+            case 'grenadeCap':
+              GRENADE_DEF.maxCarry += amount; // 既存上限(500)はそもそも高いが、表示上意味を持たせる場合に使用
+              break;
+          }
+          updateHpUI();
+        }
+
+        // ---------- コインドロップ(敵撃破時にランダム出現) ----------
+        const COIN_DROP_CHANCE = 0.45; // 45%の確率でドロップ
+        const coinPickups = []; // { group, marker, amount, spinPhase, collected }
+
+        function createCoinMesh() {
+          const group = new THREE.Group();
+          const coinMat = new THREE.MeshStandardMaterial({
+            color: 0x3a3000,
+            roughness: 0.3,
+            metalness: 0.8,
+            emissive: 0xf7ff3a,
+            emissiveIntensity: 0.7,
+          });
+          const coin = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.22, 0.22, 0.06, 12),
+            coinMat
+          );
+          coin.rotation.z = Math.PI / 2;
+          coin.position.y = 0.5;
+          group.add(coin);
+          return { group, marker: coin };
+        }
+
+        function spawnCoinDrop(position, amount) {
+          const parts = createCoinMesh();
+          parts.group.position.copy(position);
+          parts.group.position.y = 0;
+          scene.add(parts.group);
+
+          coinPickups.push({
+            group: parts.group,
+            marker: parts.marker,
+            amount,
+            spinPhase: Math.random() * Math.PI * 2,
+            collected: false,
+          });
+        }
+
+        function updateCoinPickups(dt) {
+          for (let i = coinPickups.length - 1; i >= 0; i--) {
+            const c = coinPickups[i];
+            if (c.collected) continue;
+
+            c.spinPhase += dt * 3;
+            c.marker.rotation.x += dt * 3.0;
+            c.group.position.y = 0.5 + Math.sin(c.spinPhase) * 0.08;
+
+            const dx = camera.position.x - c.group.position.x;
+            const dz = camera.position.z - c.group.position.z;
+            const dist = Math.hypot(dx, dz);
+
+            if (dist < 1.3) {
+              c.collected = true;
+              player.credits += c.amount;
+              updateCreditsUI();
+              spawnImpactParticles(
+                c.group.position.clone().add(new THREE.Vector3(0, 0.5, 0)),
+                0xf7ff3a
+              );
+              addCrateFeed(`+${c.amount} CR`);
+              scene.remove(c.group);
+              coinPickups.splice(i, 1);
+            }
+          }
+        }
+
+        function updateCreditsUI() {
+          document.getElementById('credits-value').textContent = player.credits;
+          const shopNum = document.getElementById('shop-credits-num');
+          if (shopNum) shopNum.textContent = player.credits;
+        }
+
+        // プレイヤーが所持中の武器インスタンス(残弾やリロード状態を保持)
+        let weaponInventory = []; // [{ defKey, ammoInMag, ammoReserve, reloading, reloadTimer }, ...]
+        let currentWeaponIndex = 0;
+
+        function createWeaponInstance(defKey, ammoReserve) {
+          const def = WEAPON_DEFS[defKey];
+          return {
+            defKey,
+            ammoInMag: def.magSize,
+            ammoReserve:
+              ammoReserve !== undefined ? ammoReserve : def.magSize * 3,
+            reloading: false,
+            reloadTimer: 0,
+            fireCooldown: 0,
+          };
+        }
+
+        // 共通の状態(近接攻撃など、武器に依存しないもの)
+        const weaponState = {
+          meleeCooldownTimer: 0,
+          meleeAnim: 0,
+          meleeAnimDuration: 0.28,
+        };
+
+        function currentWeapon() {
+          return weaponInventory[currentWeaponIndex];
+        }
+        function currentDef() {
+          return WEAPON_DEFS[currentWeapon().defKey];
+        }
+        function ownsWeapon(defKey) {
+          return weaponInventory.some((w) => w.defKey === defKey);
+        }
+        function indexOfWeapon(defKey) {
+          return weaponInventory.findIndex((w) => w.defKey === defKey);
+        }
+
+        // スロット番号(0=1キー,1=2キー,2=3キー)に対応する武器へ切替。未所持なら何もしない。
+        function switchToWeaponSlot(slot) {
+          const defKey = WEAPON_SLOT_ORDER[slot];
+          if (!defKey) return;
+          const idx = indexOfWeapon(defKey);
+          if (idx === -1) return; // 未所持
+          switchToWeaponIndex(idx);
+        }
+
+        function switchToWeaponIndex(idx) {
+          if (
+            idx === currentWeaponIndex ||
+            idx < 0 ||
+            idx >= weaponInventory.length
+          )
+            return;
+          if (state.isADS) exitADS();
+          currentWeaponIndex = idx;
+          const def = currentDef();
+          setActiveGunModel(currentWeapon().defKey);
+          dom.reloadIndicator.classList.toggle(
+            'show',
+            currentWeapon().reloading
+          );
+          updateAmmoUI();
+          updateWeaponSlotsUI();
+        }
+
+        // マウスホイールで所持武器を順送りに切替
+        function cycleWeapon(direction) {
+          if (weaponInventory.length <= 1) return;
+          let idx = currentWeaponIndex;
+          idx =
+            (idx + direction + weaponInventory.length) % weaponInventory.length;
+          switchToWeaponIndex(idx);
+        }
+
+        function updateWeaponSlotsUI() {
+          const slotEls = document.querySelectorAll('#weapon-slots .wslot');
+          slotEls.forEach((el) => {
+            const slot = parseInt(el.dataset.slot, 10) - 1;
+            const defKey = WEAPON_SLOT_ORDER[slot];
+            const owned = ownsWeapon(defKey);
+            const isActive = owned && currentWeapon().defKey === defKey;
+            el.classList.toggle('owned', owned);
+            el.classList.toggle('active', isActive);
+          });
+        }
+
+        // ---------- DOM 参照 ----------
+        const dom = {
+          hpFill: document.getElementById('hp-fill'),
+          hpNum: document.getElementById('hp-num'),
+          shieldFill: document.getElementById('shield-fill'),
+          shieldNum: document.getElementById('shield-num'),
+          ammoCurrent: document.getElementById('ammo-current'),
+          ammoReserve: document.getElementById('ammo-reserve'),
+          weaponName: document.getElementById('weapon-name'),
+          grenadeCount: document.getElementById('grenade-count'),
+          reloadIndicator: document.getElementById('reload-indicator'),
+          waveNumber: document.getElementById('wave-number'),
+          enemiesLeft: document.getElementById('enemies-left'),
+          scoreValue: document.getElementById('score-value'),
+          killFeed: document.getElementById('kill-feed'),
+          damageVignette: document.getElementById('damage-vignette'),
+          lowHpPulse: document.getElementById('low-hp-pulse'),
+          crosshair: document.getElementById('crosshair'),
+          waveClearBanner: document.getElementById('wave-clear-banner'),
+          startScreen: document.getElementById('start-screen'),
+          resultScreen: document.getElementById('result-screen'),
+          pauseScreen: document.getElementById('pause-screen'),
+          startBtn: document.getElementById('start-btn'),
+          restartBtn: document.getElementById('restart-btn'),
+          resumeBtn: document.getElementById('resume-btn'),
+          resultTitle: document.getElementById('result-title'),
+          finalWave: document.getElementById('final-wave'),
+          finalKills: document.getElementById('final-kills'),
+          finalScore: document.getElementById('final-score'),
+          container: document.getElementById('game-container'),
+          scopeOverlay: document.getElementById('scope-overlay'),
+          shopScreen: document.getElementById('shop-screen'),
+          shopOpenBtn: document.getElementById('shop-open-btn'),
+          shopCloseBtn: document.getElementById('shop-close-btn'),
+          shopGridContainer: document.getElementById('shop-grid-container'),
+        };
+
+        // ---------- three.js セットアップ ----------
+        let scene, camera, renderer, clock;
+        let raycaster;
+        const collidables = []; // { mesh, box3 }
+        const enemies = []; // { mesh, hp, maxHp, speed, state, target, ... }
+        const bullets = []; // tracer用パーティクル
+        const muzzleLight = { obj: null, timer: 0 };
+        const impactParticles = [];
+        const ammoCrates = []; // アイテムボックス(弾薬クレート)管理用
+        const ammoSpawnState = { timer: 3.0, interval: [15, 30] }; // 次のスポーンまでの秒数と間隔範囲
+        const weaponCrates = []; // アイテムボックス(武器クレート)管理用
+        const weaponSpawnState = { timer: 8.0, interval: [25, 45] };
+
+        const ARENA_SIZE = 60; // -30 ~ 30
+
+        function initThree() {
+          scene = new THREE.Scene();
+          scene.background = new THREE.Color(0x0a0908);
+          scene.fog = new THREE.FogExp2(0x0a0908, 0.012);
+
+          camera = new THREE.PerspectiveCamera(
+            75,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            500
+          );
+          camera.position.set(0, player.height, 0);
+
+          renderer = new THREE.WebGLRenderer({ antialias: true });
+          renderer.setSize(window.innerWidth, window.innerHeight);
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+          renderer.shadowMap.enabled = false;
+          dom.container.appendChild(renderer.domElement);
+
+          clock = new THREE.Clock();
+          raycaster = new THREE.Raycaster();
+
+          // ライティング: サイバー風の冷たい環境光 + アクセントの暖色
+          const ambient = new THREE.AmbientLight(0x6a655a, 0.55);
+          scene.add(ambient);
+
+          const hemi = new THREE.HemisphereLight(0xb8a888, 0x1a140a, 0.7);
+          scene.add(hemi);
+
+          const dirLight = new THREE.DirectionalLight(0xfff0d8, 0.7);
+          dirLight.position.set(20, 40, -10);
+          scene.add(dirLight);
+
+          buildArena();
+          setupMuzzleFlash();
+          createGunModel();
+
+          window.addEventListener('resize', onResize);
+        }
+
+        // ---------- 銃の金属表現用の簡易環境マップ ----------
+        function createGunEnvMap() {
+          const pmremGenerator = new THREE.PMREMGenerator(renderer);
+          pmremGenerator.compileEquirectangularShader();
+
+          const envScene = new THREE.Scene();
+          envScene.background = new THREE.Color(0x14140f);
+
+          // 上方の主光源(やや暖色、強め) - キーライト相当
+          const topLight = new THREE.Mesh(
+            new THREE.PlaneGeometry(14, 14),
+            new THREE.MeshBasicMaterial({ color: 0xfff2d8 })
+          );
+          topLight.position.set(0, 8, 0);
+          topLight.rotation.x = Math.PI / 2;
+          envScene.add(topLight);
+
+          // 正面やや上のフィルライト(冷たい色、弱め) - 銃口側の映り込み用
+          const frontFill = new THREE.Mesh(
+            new THREE.PlaneGeometry(8, 8),
+            new THREE.MeshBasicMaterial({ color: 0x9fb8c8 })
+          );
+          frontFill.position.set(0, 1, 6);
+          frontFill.rotation.y = Math.PI;
+          envScene.add(frontFill);
+
+          // 側面のリムライト(左右非対称にすることで、丸い面の映り込みに変化が出る)
+          const sideLightL = new THREE.Mesh(
+            new THREE.PlaneGeometry(6, 10),
+            new THREE.MeshBasicMaterial({ color: 0xbcd0dc })
+          );
+          sideLightL.position.set(-6, 2, 0);
+          sideLightL.rotation.y = Math.PI / 2;
+          envScene.add(sideLightL);
+
+          const sideDarkR = new THREE.Mesh(
+            new THREE.PlaneGeometry(6, 10),
+            new THREE.MeshBasicMaterial({ color: 0x0c0c0a })
+          );
+          sideDarkR.position.set(6, 2, 0);
+          sideDarkR.rotation.y = -Math.PI / 2;
+          envScene.add(sideDarkR);
+
+          // 背面・下方は暗くして、金属の「沈み込む黒」を作る
+          const backDark = new THREE.Mesh(
+            new THREE.PlaneGeometry(14, 14),
+            new THREE.MeshBasicMaterial({ color: 0x050504 })
+          );
+          backDark.position.set(0, 0, -7);
+          envScene.add(backDark);
+
+          const bottomDark = new THREE.Mesh(
+            new THREE.PlaneGeometry(14, 14),
+            new THREE.MeshBasicMaterial({ color: 0x08080a })
+          );
+          bottomDark.position.set(0, -6, 0);
+          bottomDark.rotation.x = -Math.PI / 2;
+          envScene.add(bottomDark);
+
+          const rt = pmremGenerator.fromScene(envScene, 0.03, 0.1, 100);
+          pmremGenerator.dispose();
+          return rt.texture;
+        }
+
+        // ---------- ADS (構え/スコープ) ----------
+        const NORMAL_FOV = 75;
+        let adsFovCurrent = NORMAL_FOV;
+
+        function enterADS() {
+          if (!state.pointerLocked || state.gameOver) return;
+          state.isADS = true;
+          const def = currentDef();
+          if (def.hasScope) {
+            dom.scopeOverlay.classList.add('active');
+            if (gunGroup) gunGroup.visible = false;
+          } else {
+            dom.scopeOverlay.classList.remove('active');
+            if (gunGroup) gunGroup.visible = true;
+          }
+        }
+
+        function exitADS() {
+          state.isADS = false;
+          dom.scopeOverlay.classList.remove('active');
+          if (gunGroup) gunGroup.visible = true;
+        }
+
+        function onResize() {
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+          renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // ---------- マップ生成: サイバー風アリーナ ----------
+        function buildArena() {
+          const floorGeo = new THREE.PlaneGeometry(
+            ARENA_SIZE,
+            ARENA_SIZE,
+            1,
+            1
+          );
+          const floorMat = new THREE.MeshStandardMaterial({
+            color: 0xffffcc,
+            roughness: 0.6,
+            metalness: 0.3,
+            emissive: 0x665f3a,
+            emissiveIntensity: 0.6,
+          });
+          const floor = new THREE.Mesh(floorGeo, floorMat);
+          floor.rotation.x = -Math.PI / 2;
+          scene.add(floor);
+
+          // ネオングリッド線(床)
+          const gridHelper = new THREE.GridHelper(
+            ARENA_SIZE,
+            20,
+            0xffaa55,
+            0x332211
+          );
+          gridHelper.position.y = 0.01;
+          gridHelper.material.opacity = 0.18;
+          gridHelper.material.transparent = true;
+          scene.add(gridHelper);
+
+          // 外周の壁
+          const wallHeight = 8;
+          const wallMat = new THREE.MeshStandardMaterial({
+            color: 0xe8d9b8,
+            roughness: 0.7,
+            metalness: 0.2,
+            emissive: 0xe8d9b8,
+            emissiveIntensity: 0.3,
+          });
+          const half = ARENA_SIZE / 2;
+
+          const wallDefs = [
+            {
+              pos: [0, wallHeight / 2, -half],
+              size: [ARENA_SIZE, wallHeight, 1],
+            },
+            {
+              pos: [0, wallHeight / 2, half],
+              size: [ARENA_SIZE, wallHeight, 1],
+            },
+            {
+              pos: [-half, wallHeight / 2, 0],
+              size: [1, wallHeight, ARENA_SIZE],
+            },
+            {
+              pos: [half, wallHeight / 2, 0],
+              size: [1, wallHeight, ARENA_SIZE],
+            },
+          ];
+          wallDefs.forEach((w) => {
+            const geo = new THREE.BoxGeometry(...w.size);
+            const mesh = new THREE.Mesh(geo, wallMat);
+            mesh.position.set(...w.pos);
+            scene.add(mesh);
+            addCollidable(mesh);
+          });
+
+          // ネオンの縁取り(壁の上端に発光ライン) - シンプルに矩形を重ねる
+          addNeonStrip(
+            0,
+            wallHeight,
+            -half + 0.51,
+            ARENA_SIZE,
+            0.15,
+            0x00f0ff,
+            'z'
+          );
+          addNeonStrip(
+            0,
+            wallHeight,
+            half - 0.51,
+            ARENA_SIZE,
+            0.15,
+            0xff2a8e,
+            'z'
+          );
+          addNeonStrip(
+            -half + 0.51,
+            wallHeight,
+            0,
+            ARENA_SIZE,
+            0.15,
+            0xff2a8e,
+            'x'
+          );
+          addNeonStrip(
+            half - 0.51,
+            wallHeight,
+            0,
+            ARENA_SIZE,
+            0.15,
+            0x00f0ff,
+            'x'
+          );
+
+          // 障害物(掩蔽用ブロック)をランダム配置
+          const obstacleMat = new THREE.MeshStandardMaterial({
+            color: 0xa3a382,
+            roughness: 0.5,
+            metalness: 0.4,
+            emissive: 0xa3a382,
+            emissiveIntensity: 0.4,
+          });
+          const obstaclePositions = [
+            [10, 8],
+            [-10, 8],
+            [10, -8],
+            [-10, -8],
+            [0, 16],
+            [0, -16],
+            [18, 0],
+            [-18, 0],
+            [16, 16],
+            [-16, -16],
+            [16, -16],
+            [-16, 16],
+          ];
+          obstaclePositions.forEach(([x, z]) => {
+            const w = 2.5 + Math.random() * 1.5;
+            const h = 2.0 + Math.random() * 2.0;
+            const d = 2.5 + Math.random() * 1.5;
+            const geo = new THREE.BoxGeometry(w, h, d);
+            const mesh = new THREE.Mesh(geo, obstacleMat);
+            mesh.position.set(x, h / 2, z);
+            scene.add(mesh);
+            addCollidable(mesh);
+
+            // 各ブロック上端にアクセントの光るキャップ
+            const capGeo = new THREE.BoxGeometry(w * 0.95, 0.06, d * 0.95);
+            const capMat = new THREE.MeshBasicMaterial({
+              color: Math.random() > 0.5 ? 0x00f0ff : 0xff2a8e,
+            });
+            const cap = new THREE.Mesh(capGeo, capMat);
+            cap.position.set(x, h + 0.03, z);
+            scene.add(cap);
+          });
+
+          // 浮遊するアクセント(背景の演出用、当たり判定なし)
+          const pillarMat = new THREE.MeshBasicMaterial({
+            color: 0x0a1830,
+            transparent: true,
+            opacity: 0.5,
+          });
+          for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const r = 27;
+            const geo = new THREE.CylinderGeometry(0.3, 0.3, 14, 6);
+            const mesh = new THREE.Mesh(
+              geo,
+              new THREE.MeshBasicMaterial({
+                color: 0x00f0ff,
+                transparent: true,
+                opacity: 0.15,
+              })
+            );
+            mesh.position.set(Math.cos(angle) * r, 7, Math.sin(angle) * r);
+            scene.add(mesh);
+          }
+        }
+
+        function addNeonStrip(x, y, z, length, thickness, color, axis) {
+          const geo =
+            axis === 'z'
+              ? new THREE.BoxGeometry(length, thickness, 0.06)
+              : new THREE.BoxGeometry(0.06, thickness, length);
+          const mat = new THREE.MeshBasicMaterial({ color });
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.set(x, y, z);
+          scene.add(mesh);
+        }
+
+        function addCollidable(mesh) {
+          mesh.updateMatrixWorld(true);
+          const box = new THREE.Box3().setFromObject(mesh);
+          collidables.push({ mesh, box });
+        }
+
+        // ---------- 銃モデル ----------
+        let gunGroup, gunMuzzleTip;
+        const gunModels = {}; // defKey -> THREE.Group (camera子オブジェクトとして常駐、表示/非表示で切替)
+        let activeWeaponKey = 'rifle';
+        const gunBob = { t: 0 };
+        const gunRecoil = { current: 0 };
+        const camRecoil = { pitch: 0, yaw: 0 }; // 視点の反動オフセット
+
+        // 武器ごとの構え位置(腰だめ/ADS時のカメラ相対オフセット)
+        const GUN_VISUAL_OFFSETS = {
+          rifle: {
+            hipX: 0.32,
+            hipY: -0.32,
+            hipZ: -0.55,
+            adsX: 0.0,
+            adsY: -0.07,
+            adsZ: -0.38,
+          },
+          pistol: {
+            hipX: 0.3,
+            hipY: -0.27,
+            hipZ: -0.4,
+            adsX: 0.0,
+            adsY: -0.1,
+            adsZ: -0.32,
+          },
+          shotgun: {
+            hipX: 0.34,
+            hipY: -0.33,
+            hipZ: -0.48,
+            adsX: 0.02,
+            adsY: -0.11,
+            adsZ: -0.38,
+          },
+          sniper: {
+            hipX: 0.33,
+            hipY: -0.34,
+            hipZ: -0.62,
+            adsX: 0.0,
+            adsY: -0.06,
+            adsZ: -0.42,
+          },
+        };
+
+        function setActiveGunModel(defKey) {
+          activeWeaponKey = defKey;
+          for (const key in gunModels) {
+            gunModels[key].visible =
+              key === defKey && !(state.isADS && WEAPON_DEFS[key].hasScope);
+          }
+          gunGroup = gunModels[defKey];
+        }
+
+        function createGunModel() {
+          const gunEnvMap = createGunEnvMap();
+          gunModels.rifle = createRifleGunModel(gunEnvMap);
+          gunModels.pistol = createPistolGunModel(gunEnvMap);
+          gunModels.shotgun = createShotgunGunModel(gunEnvMap);
+          gunModels.sniper = createSniperGunModel(gunEnvMap);
+          for (const key in gunModels) {
+            camera.add(gunModels[key]);
+            gunModels[key].visible = false;
+          }
+          setActiveGunModel('rifle');
+        }
+
+        function createRifleGunModel(gunEnvMap) {
+          const gunGroup = new THREE.Group();
+
+          const bodyMat = new THREE.MeshStandardMaterial({
+            color: 0x2c2e24,
+            roughness: 0.5,
+            metalness: 0.45,
+            envMap: gunEnvMap,
+            envMapIntensity: 0.6,
+          });
+          const steelMat = new THREE.MeshStandardMaterial({
+            color: 0x1c1d1a,
+            roughness: 0.3,
+            metalness: 0.85,
+            envMap: gunEnvMap,
+            envMapIntensity: 1.1,
+          });
+          const polymerMat = new THREE.MeshStandardMaterial({
+            color: 0x1f201c,
+            roughness: 0.65,
+            metalness: 0.1,
+            envMap: gunEnvMap,
+            envMapIntensity: 0.3,
+          });
+          const accentMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+          const accentMagMat = new THREE.MeshBasicMaterial({ color: 0x8a8f7a });
+
+          // アッパーレシーバー(フラットトップ、AR系特有の直線的な上面)
+          const upperReceiver = new THREE.Mesh(
+            new THREE.BoxGeometry(0.1, 0.09, 0.36),
+            bodyMat
+          );
+          upperReceiver.position.set(0, 0.065, -0.04);
+          gunGroup.add(upperReceiver);
+
+          // ロワーレシーバー(下段、ポリマー or アルミ)
+          const lowerReceiver = new THREE.Mesh(
+            new THREE.BoxGeometry(0.1, 0.08, 0.26),
+            polymerMat
+          );
+          lowerReceiver.position.set(0, -0.02, 0.04);
+          gunGroup.add(lowerReceiver);
+
+          // フォワードアシスト(レシーバー側面の小さな円柱、AR特有)
+          const forwardAssist = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.012, 0.012, 0.02, 8),
+            steelMat
+          );
+          forwardAssist.rotation.z = Math.PI / 2;
+          forwardAssist.position.set(0.052, 0.06, 0.04);
+          gunGroup.add(forwardAssist);
+
+          // バレル - フリーフロート、先端をテーパー
+          const barrel = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.017, 0.022, 0.36, 14),
+            steelMat
+          );
+          barrel.rotation.x = Math.PI / 2;
+          barrel.position.set(0, 0.04, -0.42);
+          gunGroup.add(barrel);
+
+          // M-LOKハンドガード(八角形断面に近い形を簡略化、現代的フリーフロート)
+          const handguard = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.05, 0.046, 0.26, 8),
+            polymerMat
+          );
+          handguard.rotation.x = Math.PI / 2;
+          handguard.position.set(0, 0.025, -0.27);
+          gunGroup.add(handguard);
+
+          // M-LOKスロット(側面の小さな切れ込み風の溝)
+          const slotMat = new THREE.MeshBasicMaterial({ color: 0x0a0a08 });
+          for (let i = 0; i < 4; i++) {
+            const slot = new THREE.Mesh(
+              new THREE.BoxGeometry(0.018, 0.006, 0.05),
+              slotMat
+            );
+            slot.position.set(0, -0.005, -0.18 - i * 0.06);
+            gunGroup.add(slot);
+          }
+
+          // フロントサイト折りたたみ式(現代的なバックアップサイト)
+          const frontSightBase = new THREE.Mesh(
+            new THREE.BoxGeometry(0.018, 0.018, 0.012),
+            steelMat
+          );
+          frontSightBase.position.set(0, 0.105, -0.39);
+          gunGroup.add(frontSightBase);
+
+          // 銃口部のフラッシュハイダー(複数のスリット付き円柱)
+          const flashHider = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.02, 0.022, 0.045, 8),
+            steelMat
+          );
+          flashHider.rotation.x = Math.PI / 2;
+          flashHider.position.set(0, 0.04, -0.595);
+          gunGroup.add(flashHider);
+
+          // マガジン(AR用ストレートマガジン、ポリマー)
+          const mag = new THREE.Mesh(
+            new THREE.BoxGeometry(0.07, 0.26, 0.115),
+            polymerMat
+          );
+          mag.position.set(0, -0.21, -0.04);
+          mag.rotation.x = 0.06;
+          gunGroup.add(mag);
+          const magCap = new THREE.Mesh(
+            new THREE.BoxGeometry(0.075, 0.025, 0.12),
+            accentMagMat
+          );
+          magCap.position.set(0, -0.335, -0.025);
+          magCap.rotation.x = 0.06;
+          gunGroup.add(magCap);
+
+          // ピストルグリップ(現代的なポリマー、角度のあるテーパー)
+          const gripGeo = new THREE.CylinderGeometry(0.05, 0.038, 0.2, 4, 1);
+          gripGeo.rotateY(Math.PI / 4);
+          const grip = new THREE.Mesh(gripGeo, polymerMat);
+          grip.position.set(0, -0.155, 0.085);
+          grip.rotation.x = -0.22;
+          gunGroup.add(grip);
+
+          // トリガーガード
+          const triggerGuard = new THREE.Mesh(
+            new THREE.TorusGeometry(0.04, 0.01, 6, 10),
+            steelMat
+          );
+          triggerGuard.rotation.x = Math.PI / 2;
+          triggerGuard.position.set(0, -0.04, 0.06);
+          gunGroup.add(triggerGuard);
+
+          // 伸縮式ストック(複数の段差で表現、現代AR特有のテレスコピックストック)
+          const stockTube = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.024, 0.024, 0.16, 8),
+            steelMat
+          );
+          stockTube.rotation.x = Math.PI / 2;
+          stockTube.position.set(0, 0.0, 0.3);
+          gunGroup.add(stockTube);
+
+          const stockBody = new THREE.Mesh(
+            new THREE.BoxGeometry(0.07, 0.1, 0.16),
+            polymerMat
+          );
+          stockBody.position.set(0, 0.0, 0.4);
+          gunGroup.add(stockBody);
+
+          const stockPadMat = new THREE.MeshStandardMaterial({
+            color: 0x141414,
+            roughness: 0.85,
+            metalness: 0.0,
+          });
+          const stockPad = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.05, 0.046, 0.025, 8),
+            stockPadMat
+          );
+          stockPad.rotation.x = Math.PI / 2;
+          stockPad.position.set(0, 0.0, 0.485);
+          gunGroup.add(stockPad);
+
+          // ピカティニーレール(フラットトップ全長、現代的なフルレール)
+          const topRail = new THREE.Mesh(
+            new THREE.BoxGeometry(0.05, 0.022, 0.46),
+            steelMat
+          );
+          topRail.position.set(0, 0.115, -0.1);
+          gunGroup.add(topRail);
+          // レールの溝(複数の細い切れ込みで表現)
+          const railSlotMat = new THREE.MeshBasicMaterial({ color: 0x0a0a08 });
+          for (let i = 0; i < 10; i++) {
+            const slot = new THREE.Mesh(
+              new THREE.BoxGeometry(0.052, 0.006, 0.012),
+              railSlotMat
+            );
+            slot.position.set(0, 0.126, -0.3 + i * 0.045);
+            gunGroup.add(slot);
+          }
+
+          // ---------- 可変倍率スコープ(既存と同じ付け方を維持) ----------
+          const scopeTubeMat = new THREE.MeshStandardMaterial({
+            color: 0x16170f,
+            roughness: 0.4,
+            metalness: 0.6,
+            envMap: gunEnvMap,
+            envMapIntensity: 0.7,
+          });
+          const scopeTube = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.038, 0.038, 0.28, 12),
+            scopeTubeMat
+          );
+          scopeTube.rotation.x = Math.PI / 2;
+          scopeTube.position.set(0, 0.17, -0.15);
+          gunGroup.add(scopeTube);
+
+          const scopeFrontHood = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.048, 0.042, 0.04, 12),
+            scopeTubeMat
+          );
+          scopeFrontHood.rotation.x = Math.PI / 2;
+          scopeFrontHood.position.set(0, 0.115, -0.31);
+          gunGroup.add(scopeFrontHood);
+
+          const scopeRearHood = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.044, 0.038, 0.03, 12),
+            scopeTubeMat
+          );
+          scopeRearHood.rotation.x = Math.PI / 2;
+          scopeRearHood.position.set(0, 0.115, 0.0);
+          gunGroup.add(scopeRearHood);
+
+          const lensMat = new THREE.MeshPhysicalMaterial({
+            color: 0x2a4a25,
+            transparent: true,
+            opacity: 0.55,
+            roughness: 0.05,
+            metalness: 0,
+            envMap: gunEnvMap,
+            envMapIntensity: 1.2,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.05,
+          });
+          const frontLens = new THREE.Mesh(
+            new THREE.CircleGeometry(0.042, 12),
+            lensMat
+          );
+          frontLens.rotation.y = Math.PI / 2;
+          frontLens.position.set(0, 0.115, -0.332);
+          gunGroup.add(frontLens);
+
+          const rearLens = new THREE.Mesh(
+            new THREE.CircleGeometry(0.036, 12),
+            lensMat
+          );
+          rearLens.rotation.y = -Math.PI / 2;
+          rearLens.position.set(0, 0.115, 0.018);
+          gunGroup.add(rearLens);
+
+          const lensRingMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
+          const lensRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.03, 0.004, 6, 12),
+            lensRingMat
+          );
+          lensRing.rotation.y = Math.PI / 2;
+          lensRing.position.set(0, 0.115, -0.328);
+          gunGroup.add(lensRing);
+
+          const dialMat = new THREE.MeshStandardMaterial({
+            color: 0x1a1b16,
+            roughness: 0.3,
+            metalness: 0.85,
+            envMap: gunEnvMap,
+            envMapIntensity: 1.0,
+          });
+          const dialElev = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.016, 0.016, 0.022, 8),
+            dialMat
+          );
+          dialElev.position.set(0, 0.155, -0.13);
+          gunGroup.add(dialElev);
+
+          const dialWind = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.013, 0.013, 0.022, 8),
+            dialMat
+          );
+          dialWind.rotation.z = Math.PI / 2;
+          dialWind.position.set(0.052, 0.115, -0.13);
+          gunGroup.add(dialWind);
+
+          const mountMat = new THREE.MeshStandardMaterial({
+            color: 0x1c1d16,
+            roughness: 0.35,
+            metalness: 0.8,
+            envMap: gunEnvMap,
+            envMapIntensity: 0.9,
+          });
+          [-0.22, -0.07].forEach((zPos) => {
+            const ring = new THREE.Mesh(
+              new THREE.TorusGeometry(0.042, 0.012, 6, 12),
+              mountMat
+            );
+            ring.rotation.y = Math.PI / 2;
+            ring.position.set(0, 0.135, zPos);
+            gunGroup.add(ring);
+
+            const foot = new THREE.Mesh(
+              new THREE.BoxGeometry(0.025, 0.028, 0.022),
+              mountMat
+            );
+            foot.position.set(0, 0.092, zPos);
+            gunGroup.add(foot);
+          });
+
+          // ボディサイドのアクセントライン
+          const stripeMat = new THREE.MeshBasicMaterial({
+            color: 0x00f0ff,
+            transparent: true,
+            opacity: 0.5,
+          });
+          const stripeL = new THREE.Mesh(
+            new THREE.BoxGeometry(0.008, 0.012, 0.28),
+            stripeMat
+          );
+          stripeL.position.set(-0.052, -0.01, -0.04);
+          gunGroup.add(stripeL);
+          const stripeR = stripeL.clone();
+          stripeR.position.x = 0.052;
+          gunGroup.add(stripeR);
+
+          const localMuzzleTip = new THREE.Object3D();
+          localMuzzleTip.position.set(0, 0.04, -0.625);
+          gunGroup.add(localMuzzleTip);
+          gunMuzzleTip = localMuzzleTip;
+
+          gunGroup.position.set(
+            GUN_VISUAL_OFFSETS.rifle.hipX,
+            GUN_VISUAL_OFFSETS.rifle.hipY,
+            GUN_VISUAL_OFFSETS.rifle.hipZ
+          );
+          gunGroup.rotation.y = -0.04;
+
+          return gunGroup;
+        }
+
+        // ---------- 簡易ピストルモデル ----------
+        function createPistolGunModel(gunEnvMap) {
+          const gunGroup = new THREE.Group();
+
+          const steelMat = new THREE.MeshStandardMaterial({
+            color: 0x1a1a1c,
+            roughness: 0.22,
+            metalness: 0.9,
+            envMap: gunEnvMap,
+            envMapIntensity: 1.3,
+          });
+          const polymerMat = new THREE.MeshStandardMaterial({
+            color: 0x1f201d,
+            roughness: 0.6,
+            metalness: 0.05,
+            envMap: gunEnvMap,
+            envMapIntensity: 0.2,
+          });
+          const accentMat = new THREE.MeshBasicMaterial({ color: 0xf7ff3a });
+
+          // スライド(ストライカー式、フラットでシンプルな現代的形状)
+          const slide = new THREE.Mesh(
+            new THREE.BoxGeometry(0.068, 0.07, 0.3),
+            steelMat
+          );
+          slide.position.set(0, 0.055, -0.09);
+          gunGroup.add(slide);
+
+          // スライド先端の絞り
+          const muzzleCollar = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.024, 0.028, 0.04, 12),
+            steelMat
+          );
+          muzzleCollar.rotation.x = Math.PI / 2;
+          muzzleCollar.position.set(0, 0.055, -0.235);
+          gunGroup.add(muzzleCollar);
+
+          // スライドセレーション(前後2か所、現代ピストル特有)
+          const serrationMat = new THREE.MeshBasicMaterial({ color: 0x0a0a0a });
+          for (let i = 0; i < 4; i++) {
+            const rearSer = new THREE.Mesh(
+              new THREE.BoxGeometry(0.072, 0.075, 0.005),
+              serrationMat
+            );
+            rearSer.position.set(0, 0.055, 0.04 + i * 0.011);
+            gunGroup.add(rearSer);
+          }
+
+          // ポリマーフレーム(下部、グロック系特有の幅広いフレーム)
+          const frame = new THREE.Mesh(
+            new THREE.BoxGeometry(0.07, 0.06, 0.19),
+            polymerMat
+          );
+          frame.position.set(0, -0.015, -0.01);
+          gunGroup.add(frame);
+
+          // アンダーレール(トリガーガード前方、ライト/レーザー取付用)
+          const underRail = new THREE.Mesh(
+            new THREE.BoxGeometry(0.05, 0.012, 0.05),
+            steelMat
+          );
+          underRail.position.set(0, -0.04, -0.13);
+          gunGroup.add(underRail);
+          const railSlotMat = new THREE.MeshBasicMaterial({ color: 0x080808 });
+          for (let i = 0; i < 3; i++) {
+            const slot = new THREE.Mesh(
+              new THREE.BoxGeometry(0.052, 0.004, 0.006),
+              railSlotMat
+            );
+            slot.position.set(0, -0.034, -0.115 - i * 0.013);
+            gunGroup.add(slot);
+          }
+
+          // グリップ(ポリマー、現代的なテーパー+滑り止めテクスチャ風の段差)
+          const gripGeo = new THREE.CylinderGeometry(0.044, 0.036, 0.18, 4, 1);
+          gripGeo.rotateY(Math.PI / 4);
+          const grip = new THREE.Mesh(gripGeo, polymerMat);
+          grip.position.set(0, -0.13, 0.075);
+          grip.rotation.x = -0.16;
+          gunGroup.add(grip);
+
+          // グリップテクスチャ(滑り止めの突起風パネル)
+          const texPanelGeo = new THREE.BoxGeometry(0.01, 0.1, 0.05);
+          const texPanelL = new THREE.Mesh(texPanelGeo, polymerMat);
+          texPanelL.position.set(-0.028, -0.13, 0.075);
+          texPanelL.rotation.x = -0.16;
+          gunGroup.add(texPanelL);
+          const texPanelR = texPanelL.clone();
+          texPanelR.position.x = 0.028;
+          gunGroup.add(texPanelR);
+
+          // グリップ底のフロアプレート(マガジンキャッチ含む拡張ベースプレート風)
+          const gripCap = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.036, 0.04, 0.012, 4),
+            polymerMat
+          );
+          gripCap.rotation.y = Math.PI / 4;
+          gripCap.rotation.x = -0.16;
+          gripCap.position.set(0, -0.215, 0.1);
+          gunGroup.add(gripCap);
+
+          // トリガーガード(現代的な角ばった形)
+          const triggerGuard = new THREE.Mesh(
+            new THREE.TorusGeometry(0.03, 0.008, 6, 10),
+            polymerMat
+          );
+          triggerGuard.rotation.x = Math.PI / 2;
+          triggerGuard.position.set(0, -0.032, -0.025);
+          gunGroup.add(triggerGuard);
+
+          const trigger = new THREE.Mesh(
+            new THREE.BoxGeometry(0.012, 0.028, 0.008),
+            steelMat
+          );
+          trigger.position.set(0, -0.028, -0.04);
+          trigger.rotation.x = 0.12;
+          gunGroup.add(trigger);
+
+          // スライドストップレバー(分解レバー、現代ピストル特有)
+          const slideStop = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.011, 0.011, 0.012, 8),
+            steelMat
+          );
+          slideStop.rotation.z = Math.PI / 2;
+          slideStop.position.set(0.038, 0.012, -0.05);
+          gunGroup.add(slideStop);
+
+          // スライド上面のダットサイト風サイト(現代的なミニレッドドット土台)
+          const sightBase = new THREE.Mesh(
+            new THREE.BoxGeometry(0.03, 0.012, 0.04),
+            steelMat
+          );
+          sightBase.position.set(0, 0.095, 0.0);
+          gunGroup.add(sightBase);
+          const sightWindow = new THREE.Mesh(
+            new THREE.BoxGeometry(0.022, 0.016, 0.004),
+            new THREE.MeshPhysicalMaterial({
+              color: 0x1a3a3a,
+              transparent: true,
+              opacity: 0.5,
+              roughness: 0.1,
+            })
+          );
+          sightWindow.position.set(0, 0.105, 0.015);
+          gunGroup.add(sightWindow);
+
+          // 銃口の発光リング
+          const muzzleRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.018, 0.005, 6, 10),
+            accentMat
+          );
+          muzzleRing.position.set(0, 0.055, -0.238);
+          gunGroup.add(muzzleRing);
+
+          // フロントサイト(バックアップ用、控えめ)
+          const sightMat = new THREE.MeshBasicMaterial({ color: 0xf7ff3a });
+          const frontSight = new THREE.Mesh(
+            new THREE.BoxGeometry(0.01, 0.012, 0.01),
+            sightMat
+          );
+          frontSight.position.set(0, 0.09, -0.22);
+          gunGroup.add(frontSight);
+
+          gunGroup.position.set(
+            GUN_VISUAL_OFFSETS.pistol.hipX,
+            GUN_VISUAL_OFFSETS.pistol.hipY,
+            GUN_VISUAL_OFFSETS.pistol.hipZ
+          );
+          gunGroup.rotation.y = -0.04;
+          return gunGroup;
+        }
+
+        // ---------- 簡易ショットガンモデル ----------
+        // ---------- ショットガンモデル(改善版) ----------
+        function createShotgunGunModel(gunEnvMap) {
+          const gunGroup = new THREE.Group();
+
+          const steelMat = new THREE.MeshStandardMaterial({
+            color: 0x1e1f1c,
+            roughness: 0.28,
+            metalness: 0.88,
+            envMap: gunEnvMap,
+            envMapIntensity: 1.05,
+          });
+          // レシーバー用: やや明るめのダークグレー(加工鉄っぽさ)
+          const receiverMat = new THREE.MeshStandardMaterial({
+            color: 0x252620,
+            roughness: 0.35,
+            metalness: 0.82,
+            envMap: gunEnvMap,
+            envMapIntensity: 0.95,
+          });
+          const polymerMat = new THREE.MeshStandardMaterial({
+            color: 0x1a1b17,
+            roughness: 0.65,
+            metalness: 0.08,
+            envMap: gunEnvMap,
+            envMapIntensity: 0.25,
+          });
+          const rubberMat = new THREE.MeshStandardMaterial({
+            color: 0x111110,
+            roughness: 0.92,
+            metalness: 0.02,
+          });
+          const accentMat = new THREE.MeshBasicMaterial({ color: 0xff2a8e });
+
+          // ---- レシーバー本体(幅を絞り、縦方向にしっかりした塊感) ----
+          // メインレシーバー: 幅を0.10に絞って銃らしいシルエットに
+          const receiver = new THREE.Mesh(
+            new THREE.BoxGeometry(0.095, 0.13, 0.235),
+            receiverMat
+          );
+          receiver.position.set(0, 0.025, 0.01);
+          gunGroup.add(receiver);
+
+          // レシーバー前端のネック(バレルへの絞り込み部分)
+          const receiverNeck = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.048, 0.056, 0.06, 10),
+            receiverMat
+          );
+          receiverNeck.rotation.x = Math.PI / 2;
+          receiverNeck.position.set(0, 0.04, -0.125);
+          gunGroup.add(receiverNeck);
+
+          // ---- バレル(太く、存在感を出す) ----
+          // アウターバレル: 実銃っぽい太さ(径0.038)
+          const barrel = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.038, 0.04, 0.46, 14),
+            steelMat
+          );
+          barrel.rotation.x = Math.PI / 2;
+          barrel.position.set(0, 0.048, -0.385);
+          gunGroup.add(barrel);
+
+          // バレル根元のシーリング(レシーバーとの接合部に段差)
+          const barrelCollar = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.046, 0.046, 0.03, 12),
+            steelMat
+          );
+          barrelCollar.rotation.x = Math.PI / 2;
+          barrelCollar.position.set(0, 0.048, -0.168);
+          gunGroup.add(barrelCollar);
+
+          // ---- マガジンチューブ(バレルと並走する太めのチューブ、ショットガン最大の特徴) ----
+          const magTube = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.024, 0.024, 0.42, 12),
+            steelMat
+          );
+          magTube.rotation.x = Math.PI / 2;
+          magTube.position.set(0, -0.012, -0.36);
+          gunGroup.add(magTube);
+
+          // チューブキャップ(先端の丸み)
+          const tubeCapFront = new THREE.Mesh(
+            new THREE.SphereGeometry(0.024, 10, 8),
+            steelMat
+          );
+          tubeCapFront.position.set(0, -0.012, -0.572);
+          gunGroup.add(tubeCapFront);
+
+          // チューブとレシーバーをつなぐブリッジ(バレル下部の支柱)
+          const tubeBridgeGeo = new THREE.BoxGeometry(0.022, 0.052, 0.025);
+          const tubeBridgeFront = new THREE.Mesh(tubeBridgeGeo, steelMat);
+          tubeBridgeFront.position.set(0, 0.018, -0.54);
+          gunGroup.add(tubeBridgeFront);
+          const tubeBridgeRear = new THREE.Mesh(tubeBridgeGeo, steelMat);
+          tubeBridgeRear.position.set(0, 0.018, -0.18);
+          gunGroup.add(tubeBridgeRear);
+
+          // ---- フォアエンド(ポンプハンドル: しっかりした形状に) ----
+          // ポンプ本体: 六角形断面に近いシルエット
+          const pumpBody = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.052, 0.048, 0.195, 8),
+            polymerMat
+          );
+          pumpBody.rotation.x = Math.PI / 2;
+          pumpBody.position.set(0, 0.018, -0.35);
+          gunGroup.add(pumpBody);
+
+          // ポンプのリブ(滑り止めの溝、太めに)
+          const grooveMat = new THREE.MeshBasicMaterial({ color: 0x090908 });
+          for (let i = 0; i < 7; i++) {
+            const groove = new THREE.Mesh(
+              new THREE.TorusGeometry(0.052, 0.0055, 6, 14),
+              grooveMat
+            );
+            groove.rotation.x = Math.PI / 2;
+            groove.position.set(0, 0.018, -0.265 - i * 0.022);
+            gunGroup.add(groove);
+          }
+
+          // ---- グリップ(角度をしっかりつけた現代的ピストルグリップ) ----
+          const gripGeo = new THREE.CylinderGeometry(0.05, 0.038, 0.19, 4, 1);
+          gripGeo.rotateY(Math.PI / 4);
+          const grip = new THREE.Mesh(gripGeo, polymerMat);
+          grip.position.set(0, -0.13, 0.1);
+          grip.rotation.x = -0.32;
+          gunGroup.add(grip);
+
+          // グリップテクスチャパネル(左右の滑り止め)
+          const texGeo = new THREE.BoxGeometry(0.01, 0.11, 0.06);
+          const texL = new THREE.Mesh(texGeo, polymerMat);
+          texL.position.set(-0.03, -0.13, 0.1);
+          texL.rotation.x = -0.32;
+          gunGroup.add(texL);
+          const texR = texL.clone();
+          texR.position.x = 0.03;
+          gunGroup.add(texR);
+
+          // グリップ底のベースキャップ
+          const gripCap = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.038, 0.042, 0.014, 4),
+            rubberMat
+          );
+          gripCap.rotation.y = Math.PI / 4;
+          gripCap.rotation.x = -0.32;
+          gripCap.position.set(0, -0.218, 0.128);
+          gunGroup.add(gripCap);
+
+          // ---- トリガーガード(角ばった現代的デザイン) ----
+          const trigGuard = new THREE.Mesh(
+            new THREE.TorusGeometry(0.034, 0.009, 6, 12),
+            polymerMat
+          );
+          trigGuard.rotation.x = Math.PI / 2;
+          trigGuard.position.set(0, -0.024, 0.028);
+          gunGroup.add(trigGuard);
+
+          const trigger = new THREE.Mesh(
+            new THREE.BoxGeometry(0.01, 0.03, 0.01),
+            steelMat
+          );
+          trigger.position.set(0, -0.02, 0.01);
+          trigger.rotation.x = 0.14;
+          gunGroup.add(trigger);
+
+          // ---- ストック(伸縮式、各パーツを丁寧に) ----
+          // チューブ
+          const stockTube = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.022, 0.022, 0.115, 8),
+            steelMat
+          );
+          stockTube.rotation.x = Math.PI / 2;
+          stockTube.position.set(0, -0.002, 0.268);
+          gunGroup.add(stockTube);
+
+          // ストック本体(少し厚みを持たせる)
+          const stockBody = new THREE.Mesh(
+            new THREE.BoxGeometry(0.068, 0.108, 0.182),
+            polymerMat
+          );
+          stockBody.position.set(0, -0.002, 0.385);
+          gunGroup.add(stockBody);
+
+          // チークピース(頬当て、ショットガンらしい)
+          const cheek = new THREE.Mesh(
+            new THREE.BoxGeometry(0.066, 0.04, 0.12),
+            polymerMat
+          );
+          cheek.position.set(0, 0.074, 0.368);
+          gunGroup.add(cheek);
+
+          // バットパッド(ゴム製リコイルパッド)
+          const buttPad = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.054, 0.05, 0.026, 8),
+            rubberMat
+          );
+          buttPad.rotation.x = Math.PI / 2;
+          buttPad.position.set(0, -0.002, 0.48);
+          gunGroup.add(buttPad);
+
+          // ---- レシーバー上部レール(MIL-STD-1913) ----
+          const topRail = new THREE.Mesh(
+            new THREE.BoxGeometry(0.046, 0.016, 0.2),
+            steelMat
+          );
+          topRail.position.set(0, 0.098, -0.008);
+          gunGroup.add(topRail);
+
+          // レールの溝
+          const railSlotMat = new THREE.MeshBasicMaterial({ color: 0x080807 });
+          for (let i = 0; i < 8; i++) {
+            const slot = new THREE.Mesh(
+              new THREE.BoxGeometry(0.048, 0.005, 0.01),
+              railSlotMat
+            );
+            slot.position.set(0, 0.106, 0.07 - i * 0.024);
+            gunGroup.add(slot);
+          }
+
+          // ---- ダットサイト(ホロサイト風、視認性重視) ----
+          const sightMat = new THREE.MeshStandardMaterial({
+            color: 0x181917,
+            roughness: 0.3,
+            metalness: 0.82,
+            envMap: gunEnvMap,
+            envMapIntensity: 0.8,
+          });
+          // フード(正面と背面のフード付き)
+          const hoodFront = new THREE.Mesh(
+            new THREE.BoxGeometry(0.04, 0.038, 0.008),
+            sightMat
+          );
+          hoodFront.position.set(0, 0.138, -0.075);
+          gunGroup.add(hoodFront);
+          const hoodRear = new THREE.Mesh(
+            new THREE.BoxGeometry(0.038, 0.034, 0.008),
+            sightMat
+          );
+          hoodRear.position.set(0, 0.136, 0.055);
+          gunGroup.add(hoodRear);
+
+          // サイドフレーム(左右)
+          const sideFrameGeo = new THREE.BoxGeometry(0.006, 0.034, 0.13);
+          const sideL = new THREE.Mesh(sideFrameGeo, sightMat);
+          sideL.position.set(-0.02, 0.136, -0.01);
+          gunGroup.add(sideL);
+          const sideR = sideL.clone();
+          sideR.position.x = 0.02;
+          gunGroup.add(sideR);
+
+          // レンズ(半透明グリーン)
+          const lensMat = new THREE.MeshPhysicalMaterial({
+            color: 0x203820,
+            transparent: true,
+            opacity: 0.5,
+            roughness: 0.05,
+            metalness: 0.0,
+            envMap: gunEnvMap,
+            envMapIntensity: 0.8,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.04,
+          });
+          const lens = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.032, 0.026),
+            lensMat
+          );
+          lens.position.set(0, 0.136, -0.01);
+          gunGroup.add(lens);
+
+          // レンズの赤いドット
+          const dotMat = new THREE.MeshBasicMaterial({ color: 0xff2a8e });
+          const dot = new THREE.Mesh(
+            new THREE.CircleGeometry(0.003, 8),
+            dotMat
+          );
+          dot.position.set(0, 0.136, -0.009);
+          gunGroup.add(dot);
+
+          // ---- サイドサドル(予備シェルホルダー、より太く実物感を) ----
+          const saddleMat = new THREE.MeshStandardMaterial({
+            color: 0x1e1008,
+            roughness: 0.58,
+            metalness: 0.12,
+          });
+          for (let i = 0; i < 5; i++) {
+            const shell = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.013, 0.013, 0.068, 10),
+              saddleMat
+            );
+            shell.rotation.z = Math.PI / 2;
+            shell.position.set(0.066, 0.012, -0.06 + i * 0.048);
+            gunGroup.add(shell);
+
+            // シェルの底(ゴールド色のリム)
+            const rim = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.0145, 0.0145, 0.008, 10),
+              new THREE.MeshBasicMaterial({ color: 0xb8882a })
+            );
+            rim.rotation.z = Math.PI / 2;
+            rim.position.set(0.1, 0.012, -0.06 + i * 0.048);
+            gunGroup.add(rim);
+          }
+
+          // ---- マズルブレーキ / チョーク(銃口デバイス) ----
+          // マズル基部(太め)
+          const muzzleBase = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.043, 0.04, 0.03, 12),
+            steelMat
+          );
+          muzzleBase.rotation.x = Math.PI / 2;
+          muzzleBase.position.set(0, 0.048, -0.595);
+          gunGroup.add(muzzleBase);
+
+          // 銃口の発光リング(マガジンピンク)
+          const muzzleRing = new THREE.Mesh(
+            new THREE.TorusGeometry(0.038, 0.007, 8, 14),
+            accentMat
+          );
+          muzzleRing.position.set(0, 0.048, -0.612);
+          gunGroup.add(muzzleRing);
+
+          // ---- フロントサイト(バックアップ用バード・ヘッド) ----
+          const frontSightPost = new THREE.Mesh(
+            new THREE.BoxGeometry(0.008, 0.022, 0.01),
+            steelMat
+          );
+          frontSightPost.position.set(0, 0.092, -0.54);
+          gunGroup.add(frontSightPost);
+
+          gunGroup.position.set(
+            GUN_VISUAL_OFFSETS.shotgun.hipX,
+            GUN_VISUAL_OFFSETS.shotgun.hipY,
+            GUN_VISUAL_OFFSETS.shotgun.hipZ
+          );
+          gunGroup.rotation.y = -0.04;
+          return gunGroup;
+        }
+
+        function createSniperGunModel(gunEnvMap) {
+          const gunGroup = new THREE.Group();
+
+          const steelMat = new THREE.MeshStandardMaterial({
+            color: 0x1c1d1a,
+            roughness: 0.28,
+            metalness: 0.88,
+            envMap: gunEnvMap,
+            envMapIntensity: 1.1,
+          });
+          const polymerMat = new THREE.MeshStandardMaterial({
+            color: 0x1f201c,
+            roughness: 0.55,
+            metalness: 0.15,
+            envMap: gunEnvMap,
+            envMapIntensity: 0.4,
+          });
+          const accentMat = new THREE.MeshBasicMaterial({ color: 0xc9a227 });
+
+          // チェイシス(現代モジュラー設計、ポリマー/アルミ複合)
+          const chassis = new THREE.Mesh(
+            new THREE.BoxGeometry(0.1, 0.13, 0.46),
+            polymerMat
+          );
+          chassis.position.set(0, 0.02, -0.02);
+          gunGroup.add(chassis);
+
+          const receiverNeck = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.026, 0.046, 0.05, 10),
+            steelMat
+          );
+          receiverNeck.rotation.x = Math.PI / 2;
+          receiverNeck.position.set(0, 0.035, -0.27);
+          gunGroup.add(receiverNeck);
+
+          // 長いバレル(フリーフロート、先端絞り)
+          const barrel = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.016, 0.022, 0.62, 14),
+            steelMat
+          );
+          barrel.rotation.x = Math.PI / 2;
+          barrel.position.set(0, 0.035, -0.55);
+          gunGroup.add(barrel);
+
+          // マズルブレーキ(現代スナイパー特有の太い銃口デバイス)
+          const muzzleBrake = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.026, 0.026, 0.06, 10),
+            steelMat
+          );
+          muzzleBrake.rotation.x = Math.PI / 2;
+          muzzleBrake.position.set(0, 0.035, -0.86);
+          gunGroup.add(muzzleBrake);
+
+          // ボルトハンドル(現代的なノブ、太め)
+          const bolt = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.013, 0.013, 0.1, 8),
+            steelMat
+          );
+          bolt.rotation.z = Math.PI / 2;
+          bolt.position.set(0.065, 0.07, 0.08);
+          gunGroup.add(bolt);
+          const boltKnob = new THREE.Mesh(
+            new THREE.SphereGeometry(0.02, 10, 10),
+            steelMat
+          );
+          boltKnob.position.set(0.115, 0.07, 0.08);
+          gunGroup.add(boltKnob);
+
+          // 折りたたみ式アジャスタブルストック(現代モジュラー特有)
+          const stockTube = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.024, 0.024, 0.16, 8),
+            steelMat
+          );
+          stockTube.rotation.x = Math.PI / 2;
+          stockTube.position.set(0, -0.01, 0.3);
+          gunGroup.add(stockTube);
+
+          const cheekPiece = new THREE.Mesh(
+            new THREE.BoxGeometry(0.05, 0.04, 0.14),
+            polymerMat
+          );
+          cheekPiece.position.set(0, 0.075, 0.26);
+          gunGroup.add(cheekPiece);
+
+          const stockButt = new THREE.Mesh(
+            new THREE.BoxGeometry(0.07, 0.13, 0.05),
+            polymerMat
+          );
+          stockButt.position.set(0, -0.01, 0.43);
+          gunGroup.add(stockButt);
+
+          const stockPadMat = new THREE.MeshStandardMaterial({
+            color: 0x141414,
+            roughness: 0.85,
+            metalness: 0.0,
+          });
+          const stockPad = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.055, 0.05, 0.025, 8),
+            stockPadMat
+          );
+          stockPad.rotation.x = Math.PI / 2;
+          stockPad.position.set(0, -0.01, 0.465);
+          gunGroup.add(stockPad);
+
+          // ピストルグリップ(現代モジュラー、AR系グリップを流用)
+          const gripGeo = new THREE.CylinderGeometry(0.046, 0.036, 0.17, 4, 1);
+          gripGeo.rotateY(Math.PI / 4);
+          const grip = new THREE.Mesh(gripGeo, polymerMat);
+          grip.position.set(0, -0.13, 0.16);
+          grip.rotation.x = -0.25;
+          gunGroup.add(grip);
+
+          const triggerGuard = new THREE.Mesh(
+            new THREE.TorusGeometry(0.036, 0.01, 6, 10),
+            polymerMat
+          );
+          triggerGuard.rotation.x = Math.PI / 2;
+          triggerGuard.position.set(0, -0.045, 0.07);
+          gunGroup.add(triggerGuard);
+
+          // マガジン(着脱式、現代化改修ボルトアクションの特徴)
+          const mag = new THREE.Mesh(
+            new THREE.BoxGeometry(0.06, 0.13, 0.1),
+            polymerMat
+          );
+          mag.position.set(0, -0.15, -0.02);
+          mag.rotation.x = 0.1;
+          gunGroup.add(mag);
+
+          // バイポッド(展開式、現代スナイパー必須装備)
+          const bipodLegGeo = new THREE.CylinderGeometry(0.007, 0.007, 0.16, 6);
+          const bipodL = new THREE.Mesh(bipodLegGeo, steelMat);
+          bipodL.position.set(-0.028, -0.03, -0.7);
+          bipodL.rotation.z = 0.28;
+          gunGroup.add(bipodL);
+          const bipodR = bipodL.clone();
+          bipodR.position.x = 0.028;
+          bipodR.rotation.z = -0.28;
+          gunGroup.add(bipodR);
+
+          // ---------- 大型化した可変倍率スコープ ----------
+          const scopeTube = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.05, 0.05, 0.46, 16),
+            steelMat
+          );
+          scopeTube.rotation.x = Math.PI / 2;
+          scopeTube.position.set(0, 0.14, -0.18);
+          gunGroup.add(scopeTube);
+
+          const scopeFrontHood = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.062, 0.052, 0.05, 16),
+            steelMat
+          );
+          scopeFrontHood.rotation.x = Math.PI / 2;
+          scopeFrontHood.position.set(0, 0.14, -0.42);
+          gunGroup.add(scopeFrontHood);
+
+          const lensMat = new THREE.MeshPhysicalMaterial({
+            color: 0x2a4a25,
+            transparent: true,
+            opacity: 0.55,
+            roughness: 0.05,
+            metalness: 0,
+            envMap: gunEnvMap,
+            envMapIntensity: 1.2,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.05,
+          });
+          const frontLens = new THREE.Mesh(
+            new THREE.CircleGeometry(0.052, 16),
+            lensMat
+          );
+          frontLens.rotation.y = Math.PI / 2;
+          frontLens.position.set(0, 0.14, -0.445);
+          gunGroup.add(frontLens);
+
+          // エレベーション/ウィンデージダイヤル(大型化、現代スコープらしい操作性表現)
+          const dialMat = new THREE.MeshStandardMaterial({
+            color: 0x1a1b16,
+            roughness: 0.3,
+            metalness: 0.85,
+            envMap: gunEnvMap,
+            envMapIntensity: 1.0,
+          });
+          const dialElev = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.022, 0.022, 0.03, 10),
+            dialMat
+          );
+          dialElev.position.set(0, 0.19, -0.18);
+          gunGroup.add(dialElev);
+          const dialWind = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.018, 0.018, 0.026, 10),
+            dialMat
+          );
+          dialWind.rotation.z = Math.PI / 2;
+          dialWind.position.set(0.07, 0.14, -0.18);
+          gunGroup.add(dialWind);
+
+          // サイドフォーカス(パララックス調整リング、現代スコープ特有)
+          const sideFocus = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.014, 0.014, 0.018, 10),
+            dialMat
+          );
+          sideFocus.rotation.z = Math.PI / 2;
+          sideFocus.position.set(-0.06, 0.14, -0.32);
+          gunGroup.add(sideFocus);
+
+          // マウントリング×2(現代的な太いリング)
+          [-0.34, -0.04].forEach((zPos) => {
+            const ring = new THREE.Mesh(
+              new THREE.TorusGeometry(0.054, 0.013, 6, 16),
+              steelMat
+            );
+            ring.rotation.y = Math.PI / 2;
+            ring.position.set(0, 0.14, zPos);
+            gunGroup.add(ring);
+
+            const foot = new THREE.Mesh(
+              new THREE.BoxGeometry(0.035, 0.035, 0.026),
+              steelMat
+            );
+            foot.position.set(0, 0.092, zPos);
+            gunGroup.add(foot);
+          });
+
+          // アクセントライン
+          const stripe = new THREE.Mesh(
+            new THREE.BoxGeometry(0.006, 0.01, 0.4),
+            accentMat
+          );
+          stripe.position.set(0.054, -0.01, -0.02);
+          gunGroup.add(stripe);
+
+          const localMuzzleTip = new THREE.Object3D();
+          localMuzzleTip.position.set(0, 0.035, -0.89);
+          gunGroup.add(localMuzzleTip);
+
+          gunGroup.position.set(
+            GUN_VISUAL_OFFSETS.sniper.hipX,
+            GUN_VISUAL_OFFSETS.sniper.hipY,
+            GUN_VISUAL_OFFSETS.sniper.hipZ
+          );
+          gunGroup.rotation.y = -0.04;
+          return gunGroup;
+        }
+
+        // ---------- マズルフラッシュ用ライト ----------
+        function setupMuzzleFlash() {
+          const light = new THREE.PointLight(0x66e0ff, 0, 8);
+          light.position.set(0.32, -0.3, -1.25);
+          camera.add(light);
+          scene.add(camera);
+          muzzleLight.obj = light;
+        }
+
+        // ---------- 入力処理 ----------
+        function setupInput() {
+          window.addEventListener('keydown', (e) => {
+            state.keys[e.code] = true;
+            if (e.code === 'KeyR') tryReload();
+            if (e.code === 'KeyV') tryMelee();
+            if (e.code === 'KeyG') tryThrowGrenade();
+            if (e.code === 'Digit1') switchToWeaponSlot(0);
+            if (e.code === 'Digit2') switchToWeaponSlot(1);
+            if (e.code === 'Digit3') switchToWeaponSlot(2);
+            if (e.code === 'Digit4') switchToWeaponSlot(3);
+          });
+          window.addEventListener('keyup', (e) => {
+            state.keys[e.code] = false;
+          });
+
+          renderer.domElement.addEventListener(
+            'wheel',
+            (e) => {
+              if (!state.running || state.gameOver) return;
+              cycleWeapon(e.deltaY > 0 ? 1 : -1);
+            },
+            { passive: true }
+          );
+
+          renderer.domElement.addEventListener('mousedown', (e) => {
+            if (e.button === 0) state.mouseDown = true;
+            if (e.button === 2) enterADS(); // 右クリック → ADS
+          });
+          window.addEventListener('mouseup', (e) => {
+            if (e.button === 0) {
+              state.mouseDown = false;
+              state.triggerLocked = false;
+            }
+            if (e.button === 2) exitADS(); // 右クリック離す → ADS解除
+          });
+          // 右クリックのコンテキストメニューを無効化
+          renderer.domElement.addEventListener('contextmenu', (e) =>
+            e.preventDefault()
+          );
+
+          document.addEventListener('mousemove', (e) => {
+            if (!state.pointerLocked) return;
+            const sensitivity = 0.0022;
+            camYaw -= e.movementX * sensitivity;
+            camPitch -= e.movementY * sensitivity;
+            camPitch = Math.max(
+              -Math.PI / 2 + 0.05,
+              Math.min(Math.PI / 2 - 0.05, camPitch)
+            );
+          });
+
+          document.addEventListener('pointerlockchange', () => {
+            state.pointerLocked =
+              document.pointerLockElement === renderer.domElement;
+            if (!state.pointerLocked && state.running && !state.gameOver) {
+              showPause();
+            }
+          });
+
+          renderer.domElement.addEventListener('click', () => {
+            if (state.running && !state.gameOver && !state.pointerLocked) {
+              renderer.domElement.requestPointerLock();
+            }
+          });
+        }
+
+        let camYaw = 0;
+        let camPitch = 0;
+
+        const JUMP_VELOCITY = 8.0;
+
+        // ---------- プレイヤー移動・物理 ----------
+        function updatePlayer(dt) {
+          // 反動の減衰(回復)
+          camRecoil.pitch *= Math.max(0, 1 - dt * 1.5);
+          camRecoil.yaw *= Math.max(0, 1 - dt * 0.2);
+
+          camera.rotation.order = 'YXZ';
+          camera.rotation.y = camYaw + camRecoil.yaw;
+          camera.rotation.x = camPitch + camRecoil.pitch;
+
+          const forward = new THREE.Vector3(
+            Math.sin(camYaw),
+            0,
+            Math.cos(camYaw)
+          ).multiplyScalar(-1);
+          const right = new THREE.Vector3(
+            Math.sin(camYaw + Math.PI / 2),
+            0,
+            Math.cos(camYaw + Math.PI / 2)
+          ).multiplyScalar(-1);
+
+          let moveX = 0,
+            moveZ = 0;
+          if (state.keys['KeyW']) {
+            moveX += forward.x;
+            moveZ += forward.z;
+          }
+          if (state.keys['KeyS']) {
+            moveX -= forward.x;
+            moveZ -= forward.z;
+          }
+          if (state.keys['KeyA']) {
+            moveX -= right.x;
+            moveZ -= right.z;
+          }
+          if (state.keys['KeyD']) {
+            moveX += right.x;
+            moveZ += right.z;
+          }
+
+          const moveLen = Math.hypot(moveX, moveZ);
+          let curSpeed = player.speed;
+          if (state.keys['ShiftLeft'] || state.keys['ShiftRight'])
+            curSpeed *= player.sprintMult;
+
+          if (moveLen > 0.0001) {
+            moveX = (moveX / moveLen) * curSpeed * dt;
+            moveZ = (moveZ / moveLen) * curSpeed * dt;
+          } else {
+            moveX = 0;
+            moveZ = 0;
+          }
+
+          // 衝突判定つき移動(X, Z別々に処理してすり抜けを軽減)
+          tryMove(moveX, 0);
+          tryMove(0, moveZ);
+
+          // ジャンプ・重力
+          if (
+            state.keys['Space'] &&
+            player.canJump &&
+            player.jumpCount < player.maxJumps
+          ) {
+            player.yVelocity = JUMP_VELOCITY;
+            player.stepTargetY = null;
+            player.onGround = false;
+            player.jumpCount++;
+
+            player.canJump = false;
+          }
+
+          if (!state.keys['Space']) {
+            player.canJump = true;
+          }
+
+          // 重力の適用とY座標の更新
+          player.yVelocity += GRAVITY * dt;
+          camera.position.y += player.yVelocity * dt;
+
+          let landed = false;
+
+          if (player.stepTargetY !== null) {
+            const diff = player.stepTargetY - camera.position.y;
+
+            camera.position.y += diff * 12 * dt;
+
+            if (Math.abs(diff) < 0.02) {
+              camera.position.y = player.stepTargetY;
+
+              player.stepTargetY = null;
+            }
+          }
+
+          // 障害物の上面判定
+          for (const c of collidables) {
+            const b = c.box;
+
+            const insideXZ =
+              camera.position.x > b.min.x - player.radius &&
+              camera.position.x < b.max.x + player.radius &&
+              camera.position.z > b.min.z - player.radius &&
+              camera.position.z < b.max.z + player.radius;
+
+            if (!insideXZ) continue;
+
+            const feetY = camera.position.y - player.height;
+            const obstacleTop = b.max.y;
+            const step = obstacleTop - feetY;
+
+            // 落下中のみ着地判定
+            if (step > 0 && step <= player.stepHeight) {
+              player.stepTargetY = obstacleTop + player.height;
+
+              player.onGround = true;
+              player.yVelocity = 0;
+              player.jumpCount = 0;
+
+              break;
+            }
+          }
+
+          // 地面着地
+          if (!landed && camera.position.y <= player.height) {
+            camera.position.y = player.height;
+            player.stepTargetY = null;
+            player.yVelocity = 0;
+            player.onGround = true;
+            player.jumpCount = 0;
+            landed = true;
+          }
+
+          if (!landed) {
+            player.onGround = false;
+
+            if (player.yVelocity < 0) {
+              player.stepTargetY = null;
+            }
+          }
+
+          // アリーナ範囲外に出ないよう制限
+          const half = ARENA_SIZE / 2 - 1.2;
+          camera.position.x = Math.max(
+            -half,
+            Math.min(half, camera.position.x)
+          );
+          camera.position.z = Math.max(
+            -half,
+            Math.min(half, camera.position.z)
+          );
+        }
+
+        function tryMove(dx, dz) {
+          const nextX = camera.position.x + dx;
+          const nextZ = camera.position.z + dz;
+
+          const r = player.radius;
+
+          for (const c of collidables) {
+            const b = c.box;
+
+            if (
+              nextX + r > b.min.x &&
+              nextX - r < b.max.x &&
+              nextZ + r > b.min.z &&
+              nextZ - r < b.max.z
+            ) {
+              if (camera.position.y > b.max.y + player.height - 0.2) {
+                continue;
+              }
+
+              const feetY = camera.position.y - player.height;
+              const obstacleTop = b.max.y;
+
+              const step = obstacleTop - feetY;
+
+              // 段差なら登る
+              if (step > 0 && step <= player.stepHeight) {
+                camera.position.y = obstacleTop + player.height;
+
+                player.onGround = true;
+                player.yVelocity = 0;
+                player.jumpCount = 0;
+
+                break;
+              }
+
+              // 高すぎるなら壁
+              return;
+            }
+          }
+
+          camera.position.x = nextX;
+          camera.position.z = nextZ;
+        }
+
+        // ---------- 武器・射撃 ----------
+        function tryReload() {
+          const w = currentWeapon();
+          const def = currentDef();
+          if (w.reloading || w.ammoInMag === def.magSize || w.ammoReserve <= 0)
+            return;
+          w.reloading = true;
+          w.reloadTimer = def.reloadTime;
+          dom.reloadIndicator.classList.add('show');
+        }
+        function tryMelee() {
+          const def = currentDef();
+          if (weaponState.meleeCooldownTimer > 0) return;
+          if (state.gameOver) return;
+
+          weaponState.meleeCooldownTimer = def.meleeCooldown;
+          weaponState.meleeAnim = weaponState.meleeAnimDuration; // アニメーション開始
+
+          // 前方方向にレイを飛ばして近接判定
+          const dir = new THREE.Vector3();
+          camera.getWorldDirection(dir);
+
+          raycaster.set(camera.position, dir);
+          raycaster.far = def.meleeRange;
+
+          const enemyMeshes = enemies
+            .filter((e) => e.alive)
+            .map((e) => e.hitbox);
+          const hits = raycaster.intersectObjects(enemyMeshes, false);
+          const wallHits = raycaster.intersectObjects(
+            collidables.map((c) => c.mesh),
+            false
+          );
+
+          if (
+            hits.length > 0 &&
+            (wallHits.length === 0 || hits[0].distance < wallHits[0].distance)
+          ) {
+            const hitEnemy = enemies.find((e) => e.hitbox === hits[0].object);
+            if (hitEnemy) {
+              damageEnemy(hitEnemy, def.meleeDamage);
+              spawnImpactParticles(hits[0].point, 0xf7ff3a);
+              flashCrosshair();
+            }
+          }
+        }
+
+        // ---------- グレネード ----------
+        function createGrenadeMesh() {
+          const group = new THREE.Group();
+          const bodyMat = new THREE.MeshStandardMaterial({
+            color: 0x2a2f22,
+            roughness: 0.6,
+            metalness: 0.4,
+            emissive: 0xff3b3b,
+            emissiveIntensity: 0.25,
+          });
+          const body = new THREE.Mesh(
+            new THREE.SphereGeometry(0.13, 8, 8),
+            bodyMat
+          );
+          group.add(body);
+
+          const capMat = new THREE.MeshBasicMaterial({ color: 0xff3b3b });
+          const cap = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.04, 0.04, 0.05, 6),
+            capMat
+          );
+          cap.position.y = 0.15;
+          group.add(cap);
+
+          return { group, body };
+        }
+
+        function tryThrowGrenade() {
+          if (state.gameOver || !state.running) return;
+          if (player.grenades <= 0) return;
+          if (grenadeThrowCooldown > 0) return;
+
+          player.grenades--;
+          grenadeThrowCooldown = GRENADE_DEF.throwCooldown;
+          updateGrenadeUI();
+
+          const dir = new THREE.Vector3();
+          camera.getWorldDirection(dir);
+
+          const parts = createGrenadeMesh();
+          parts.group.position.copy(camera.position).addScaledVector(dir, 0.5);
+          scene.add(parts.group);
+
+          const velocity = dir.clone().multiplyScalar(GRENADE_DEF.throwSpeed);
+          velocity.y += GRENADE_DEF.throwUpward;
+
+          activeGrenades.push({
+            group: parts.group,
+            velocity,
+            fuse: GRENADE_DEF.fuseTime,
+            exploded: false,
+          });
+        }
+
+        function updateGrenades(dt) {
+          if (grenadeThrowCooldown > 0) grenadeThrowCooldown -= dt;
+
+          for (let i = activeGrenades.length - 1; i >= 0; i--) {
+            const g = activeGrenades[i];
+            if (g.exploded) continue;
+
+            // 物理: 重力を加えて移動
+            g.velocity.y += GRENADE_DEF.gravity * dt;
+            const pos = g.group.position;
+            const nextPos = pos.clone().addScaledVector(g.velocity, dt);
+
+            // 地面との衝突(バウンド)
+            if (nextPos.y <= 0.13) {
+              nextPos.y = 0.13;
+              g.velocity.y *= -GRENADE_DEF.bounceDamping;
+              g.velocity.x *= 0.7;
+              g.velocity.z *= 0.7;
+            }
+
+            // 障害物との簡易衝突(当たったら反射して減速)
+            for (const c of collidables) {
+              const b = c.box;
+              const r = 0.13;
+              if (
+                nextPos.x + r > b.min.x &&
+                nextPos.x - r < b.max.x &&
+                nextPos.z + r > b.min.z &&
+                nextPos.z - r < b.max.z &&
+                nextPos.y < b.max.y &&
+                nextPos.y > b.min.y
+              ) {
+                g.velocity.x *= -GRENADE_DEF.bounceDamping;
+                g.velocity.z *= -GRENADE_DEF.bounceDamping;
+                nextPos.x = pos.x;
+                nextPos.z = pos.z;
+                break;
+              }
+            }
+
+            // アリーナ外周の壁での跳ね返り
+            const half = ARENA_SIZE / 2 - 1.0;
+            if (nextPos.x > half) {
+              nextPos.x = half;
+              g.velocity.x *= -GRENADE_DEF.bounceDamping;
+            }
+            if (nextPos.x < -half) {
+              nextPos.x = -half;
+              g.velocity.x *= -GRENADE_DEF.bounceDamping;
+            }
+            if (nextPos.z > half) {
+              nextPos.z = half;
+              g.velocity.z *= -GRENADE_DEF.bounceDamping;
+            }
+            if (nextPos.z < -half) {
+              nextPos.z = -half;
+              g.velocity.z *= -GRENADE_DEF.bounceDamping;
+            }
+
+            pos.copy(nextPos);
+            g.group.rotation.x += dt * 6;
+            g.group.rotation.z += dt * 4;
+
+            g.fuse -= dt;
+            if (g.fuse <= 0) {
+              explodeGrenade(g);
+              scene.remove(g.group);
+              activeGrenades.splice(i, 1);
+            }
+          }
+        }
+
+        function explodeGrenade(g) {
+          g.exploded = true;
+          const center = g.group.position.clone();
+
+          // 視覚エフェクト: 爆発の光球と火花
+          spawnExplosionVisual(center);
+
+          // 敵へのダメージ判定(距離減衰)
+          for (const enemy of enemies) {
+            if (!enemy.alive) continue;
+            const dist = enemy.group.position.distanceTo(center);
+            if (dist > GRENADE_DEF.explosionRadius) continue;
+            const dmg = calcGrenadeDamage(dist);
+            damageEnemy(enemy, dmg);
+          }
+
+          // プレイヤーへのダメージ判定(自爆。敵と全く同じ計算式を使う)
+          const distToPlayer = camera.position.distanceTo(center);
+          if (distToPlayer <= GRENADE_DEF.explosionRadius) {
+            const dmg = calcGrenadeDamage(distToPlayer);
+            damagePlayer(dmg);
+          }
+        }
+
+        function calcGrenadeDamage(dist) {
+          const ratio = Math.max(0, 1 - dist / GRENADE_DEF.explosionRadius);
+          const falloff =
+            GRENADE_DEF.minDamageRatio +
+            (1 - GRENADE_DEF.minDamageRatio) * ratio;
+          return GRENADE_DEF.maxDamage * falloff;
+        }
+
+        function spawnExplosionVisual(center) {
+          const flashGeo = new THREE.SphereGeometry(0.4, 10, 10);
+          const flashMat = new THREE.MeshBasicMaterial({
+            color: 0xffcf6b,
+            transparent: true,
+            opacity: 0.9,
+          });
+          const flash = new THREE.Mesh(flashGeo, flashMat);
+          flash.position.copy(center);
+          scene.add(flash);
+
+          const ringGeo = new THREE.RingGeometry(0.2, 0.3, 24);
+          const ringMat = new THREE.MeshBasicMaterial({
+            color: 0xff3b3b,
+            transparent: true,
+            opacity: 0.8,
+            side: THREE.DoubleSide,
+          });
+          const ring = new THREE.Mesh(ringGeo, ringMat);
+          ring.position.copy(center);
+          ring.rotation.x = Math.PI / 2;
+          scene.add(ring);
+
+          // 飛び散る火花(既存のimpactParticles配列を再利用)
+          for (let i = 0; i < 18; i++) {
+            const geo = new THREE.SphereGeometry(0.04, 4, 4);
+            const mat = new THREE.MeshBasicMaterial({
+              color: i % 2 === 0 ? 0xff3b3b : 0xffcf6b,
+            });
+            const p = new THREE.Mesh(geo, mat);
+            p.position.copy(center);
+            const vel = new THREE.Vector3(
+              (Math.random() - 0.5) * 10,
+              Math.random() * 6 + 1,
+              (Math.random() - 0.5) * 10
+            );
+            scene.add(p);
+            impactParticles.push({ obj: p, vel, life: 0.5, isSpark: false });
+          }
+
+          impactParticles.push({
+            obj: flash,
+            vel: new THREE.Vector3(0, 0, 0),
+            life: 0.22,
+            isSpark: false,
+            isExplosionFlash: true,
+            maxRadius: GRENADE_DEF.explosionRadius * 0.5,
+          });
+
+          // リングは専用にタイマー管理(既存のisSparkロジックと挙動が違うため別扱い)
+          let ringLife = 0.35;
+          const ringInterval = setInterval(() => {
+            ringLife -= 0.03;
+            ring.scale.setScalar(1 + (0.35 - ringLife) * 14);
+            ringMat.opacity = Math.max(0, ringLife / 0.35) * 0.8;
+            if (ringLife <= 0) {
+              clearInterval(ringInterval);
+              scene.remove(ring);
+            }
+          }, 30);
+        }
+
+        function fire() {
+          const w = currentWeapon();
+          const def = currentDef();
+          if (w.reloading) return;
+          if (w.ammoInMag <= 0) {
+            tryReload();
+            return;
+          }
+          if (w.fireCooldown > 0) return;
+
+          w.ammoInMag--;
+          w.fireCooldown = def.fireRate;
+          if (!def.automatic) state.triggerLocked = true;
+          muzzleLight.obj.intensity = 2.2;
+          muzzleLight.timer = 0.04;
+          gunRecoil.current = 0.06;
+          updateAmmoUI();
+          const recoilKick = def.pelletCount > 1 ? 0.018 : 0.01; // ショットガンは大きめ
+          const maxRecoilPitch = 0.6; // 視点が上がる上限(ラジアン)
+          camRecoil.pitch = Math.min(
+            maxRecoilPitch,
+            camRecoil.pitch + recoilKick * (state.isADS ? 0.4 : 1)
+          );
+          camRecoil.yaw += (Math.random() - 0.5) * recoilKick * 6.0;
+
+          const pellets = def.pelletCount || 1;
+          let tracerEnd = null;
+          for (let p = 0; p < pellets; p++) {
+            // 拡散(スプレッド)を加えたレイ方向
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir);
+            const currentSpread = state.isADS ? def.spread * 0.18 : def.spread;
+            dir.x += (Math.random() - 0.5) * currentSpread;
+            dir.y += (Math.random() - 0.5) * currentSpread;
+            dir.z += (Math.random() - 0.5) * currentSpread;
+            dir.normalize();
+
+            raycaster.set(camera.position, dir);
+            raycaster.far = def.range;
+
+            const enemyMeshes = enemies
+              .filter((e) => e.alive)
+              .map((e) => e.hitbox);
+            const hits = raycaster.intersectObjects(enemyMeshes, false);
+            const wallHits = raycaster.intersectObjects(
+              collidables.map((c) => c.mesh),
+              false
+            );
+
+            let pelletEnd;
+            if (
+              hits.length > 0 &&
+              (wallHits.length === 0 || hits[0].distance < wallHits[0].distance)
+            ) {
+              const hitEnemy = enemies.find((e) => e.hitbox === hits[0].object);
+              if (hitEnemy) {
+                damageEnemy(hitEnemy, def.damage);
+                spawnImpactParticles(hits[0].point, 0xff2a8e);
+                flashCrosshair();
+              }
+              pelletEnd = hits[0].point;
+            } else if (wallHits.length > 0) {
+              spawnImpactParticles(wallHits[0].point, 0x00f0ff);
+              pelletEnd = wallHits[0].point;
+            } else {
+              pelletEnd = camera.position
+                .clone()
+                .add(dir.clone().multiplyScalar(def.range));
+            }
+            if (!tracerEnd) tracerEnd = pelletEnd; // トレイルは1本だけ描画(複数粒は弾着エフェクトのみ)
+          }
+
+          spawnTracer(camera.position.clone(), tracerEnd);
+
+          if (w.ammoInMag === 0) {
+            tryReload();
+          }
+        }
+
+        function spawnTracer(start, end) {
+          const dir = end.clone().sub(start);
+          const dist = dir.length();
+          dir.normalize();
+
+          // ① トレイルライン（既存を強化: 太く短く残る発光線）
+          const points = [start, end];
+          const trailGeo = new THREE.BufferGeometry().setFromPoints(points);
+          const trailMat = new THREE.LineBasicMaterial({
+            color: 0x9ff7ff,
+            transparent: true,
+            opacity: 0.6,
+          });
+          const trail = new THREE.Line(trailGeo, trailMat);
+          scene.add(trail);
+
+          // ② 弾頭カプセル（小さな発光球が飛んでいく）
+          const bulletGeo = new THREE.SphereGeometry(0.05, 6, 6);
+          const bulletMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+          });
+          const bulletMesh = new THREE.Mesh(bulletGeo, bulletMat);
+          bulletMesh.position.copy(start);
+          scene.add(bulletMesh);
+
+          // 弾頭の後ろに付く光芒（elongated glow）
+          const glowGeo = new THREE.SphereGeometry(0.03, 4, 4);
+          const glowMat = new THREE.MeshBasicMaterial({
+            color: 0x00f0ff,
+            transparent: true,
+            opacity: 0.7,
+          });
+          const glow1 = new THREE.Mesh(glowGeo, glowMat);
+          const glow2 = new THREE.Mesh(
+            new THREE.SphereGeometry(0.016, 4, 4),
+            new THREE.MeshBasicMaterial({
+              color: 0x00f0ff,
+              transparent: true,
+              opacity: 0.4,
+            })
+          );
+          scene.add(glow1);
+          scene.add(glow2);
+
+          // ③ マズルフラッシュ: 中心の核(コア)と、外側に広がる閃光の2層構造
+          const flashCoreGeo = new THREE.SphereGeometry(0.035, 6, 6);
+          const flashCoreMat = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 1.0,
+          });
+          const flash = new THREE.Mesh(flashCoreGeo, flashCoreMat);
+          flash.position.copy(start);
+          scene.add(flash);
+
+          // 外側の広がる閃光(コアより一回り大きく、発射方向に少し伸びる)
+          const flashGlowGeo = new THREE.SphereGeometry(0.085, 6, 6);
+          const flashGlowMat = new THREE.MeshBasicMaterial({
+            color: 0x88eeff,
+            transparent: true,
+            opacity: 0.55,
+          });
+          const flashGlow = new THREE.Mesh(flashGlowGeo, flashGlowMat);
+          flashGlow.position.copy(start);
+          flashGlow.scale.set(1, 1, 1.6); // 発射方向にわずかに伸ばす
+          flashGlow.lookAt(end);
+          scene.add(flashGlow);
+
+          // 距離に応じて飛翔時間を決める(固定の速度を基準に計算し、近距離ほど速く着弾する)
+          const BULLET_SPEED = 220; // m/s相当(ゲーム内スケール)
+          const totalLife = Math.max(0.03, dist / BULLET_SPEED);
+          const flashLife = 0.035; // マズルフラッシュは短命
+
+          bullets.push({
+            // トレイルライン
+            trail,
+            trailMat,
+            // 弾頭
+            bulletMesh,
+            glow1,
+            glow2,
+            glowMat,
+            // マズルフラッシュ(コアと外側閃光)
+            flash,
+            flashMat: flashCoreMat,
+            flashGlow,
+            flashGlowMat,
+            // 飛翔パラメータ
+            start: start.clone(),
+            dir,
+            dist,
+            life: totalLife,
+            maxLife: totalLife,
+            flashLife,
+            speed: BULLET_SPEED,
+          });
+        }
+
+        function spawnImpactParticles(point, color) {
+          // 球体の火花粒子(従来通り、ただし数を減らして自然に)
+          const count = 4;
+          for (let i = 0; i < count; i++) {
+            const geo = new THREE.SphereGeometry(0.03, 4, 4);
+            const mat = new THREE.MeshBasicMaterial({ color });
+            const p = new THREE.Mesh(geo, mat);
+            p.position.copy(point);
+            const vel = new THREE.Vector3(
+              (Math.random() - 0.5) * 3.5,
+              Math.random() * 2.5,
+              (Math.random() - 0.5) * 3.5
+            );
+            scene.add(p);
+            impactParticles.push({ obj: p, vel, life: 0.35, isSpark: false });
+          }
+
+          // 線状の火花(短い線が高速で飛び散り、すぐ消える)
+          const sparkCount = 5;
+          for (let i = 0; i < sparkCount; i++) {
+            const sparkVel = new THREE.Vector3(
+              (Math.random() - 0.5) * 6,
+              Math.random() * 4,
+              (Math.random() - 0.5) * 6
+            );
+            const sparkEnd = point.clone().addScaledVector(sparkVel, 0.03);
+            const sparkGeo = new THREE.BufferGeometry().setFromPoints([
+              point,
+              sparkEnd,
+            ]);
+            const sparkMat = new THREE.LineBasicMaterial({
+              color: 0xffe8a0,
+              transparent: true,
+              opacity: 0.9,
+            });
+            const sparkLine = new THREE.Line(sparkGeo, sparkMat);
+            scene.add(sparkLine);
+            impactParticles.push({
+              obj: sparkLine,
+              vel: sparkVel,
+              life: 0.15,
+              isSpark: true,
+              sparkMat,
+            });
+          }
+        }
+        function flashCrosshair() {
+          dom.crosshair.classList.add('hit-flash');
+          setTimeout(() => dom.crosshair.classList.remove('hit-flash'), 90);
+        }
+
+        function updateWeapon(dt) {
+          const w = currentWeapon();
+          const def = currentDef();
+
+          if (w.fireCooldown > 0) w.fireCooldown -= dt;
+          if (state.mouseDown && !state.triggerLocked) fire();
+
+          if (weaponState.meleeCooldownTimer > 0)
+            weaponState.meleeCooldownTimer -= dt;
+          if (weaponState.meleeAnim > 0)
+            weaponState.meleeAnim = Math.max(0, weaponState.meleeAnim - dt);
+
+          if (w.reloading) {
+            w.reloadTimer -= dt;
+            if (w.reloadTimer <= 0) {
+              const needed = def.magSize - w.ammoInMag;
+              const toLoad = Math.min(needed, w.ammoReserve);
+              w.ammoInMag += toLoad;
+              w.ammoReserve -= toLoad;
+              w.reloading = false;
+              dom.reloadIndicator.classList.remove('show');
+              updateAmmoUI();
+            }
+          }
+
+          if (muzzleLight.timer > 0) {
+            muzzleLight.timer -= dt;
+            if (muzzleLight.timer <= 0) muzzleLight.obj.intensity = 0;
+          }
+        }
+
+        // ---------- 銃の表示更新(反動・ボビング・リロード) ----------
+        function updateGunVisual(dt) {
+          if (!gunGroup) return;
+          const w = currentWeapon();
+          const def = currentDef();
+          const offsets = GUN_VISUAL_OFFSETS[w.defKey];
+
+          // FOV補間（ADSでズームイン/アウト、武器ごとに異なるズーム量）
+          const targetFov = state.isADS ? def.adsFov : NORMAL_FOV;
+          adsFovCurrent += (targetFov - adsFovCurrent) * Math.min(1, dt * 14);
+          camera.fov = adsFovCurrent;
+          camera.updateProjectionMatrix();
+
+          // 反動の減衰
+          if (gunRecoil.current > 0) {
+            gunRecoil.current = Math.max(0, gunRecoil.current - dt * 0.4);
+          }
+
+          // 移動時のウェポンボブ(上下の揺れ)
+          const moving =
+            state.keys['KeyW'] ||
+            state.keys['KeyS'] ||
+            state.keys['KeyA'] ||
+            state.keys['KeyD'];
+          if (moving && player.onGround) {
+            gunBob.t += dt * 9;
+          } else {
+            gunBob.t += dt * 2; // 静止時もわずかに呼吸するような揺れ
+          }
+          const bobY = Math.sin(gunBob.t) * (moving ? 0.012 : 0.004);
+          const bobX = Math.cos(gunBob.t * 0.5) * (moving ? 0.006 : 0.0);
+
+          // リロード中は銃を少し下げて回転させる演出
+          let reloadOffsetY = 0;
+          let reloadRotX = 0;
+          if (w.reloading) {
+            const progress = 1 - Math.max(0, w.reloadTimer / def.reloadTime);
+            reloadOffsetY = -Math.sin(progress * Math.PI) * 0.18;
+            reloadRotX = Math.sin(progress * Math.PI) * 0.5;
+          }
+
+          // 近接攻撃(銃で殴る)の演出: 前方へ突き出して戻る動き
+          let meleeOffsetZ = 0;
+          let meleeOffsetX = 0;
+          let meleeRotX = 0;
+          let meleeRotZ = 0;
+          if (weaponState.meleeAnim > 0) {
+            // progress: 0(振り終わり)→1(振り始め) なので反転して使う
+            const t = 1 - weaponState.meleeAnim / weaponState.meleeAnimDuration;
+            // 前半で突き出し、後半で引き戻す山型の動き
+            const swing = Math.sin(t * Math.PI);
+            meleeOffsetZ = -swing * 0.32; // 前方へ突き出す
+            meleeOffsetX = -swing * 0.08; // 軽く横にひねる
+            meleeRotX = swing * 0.35; // 銃口を下げる回転
+            meleeRotZ = swing * 0.5; // 殴る動きのひねり
+          }
+
+          // ADS時は中央へ寄せる(武器ごとの構え位置を使用)
+          const adsTargetX = state.isADS ? offsets.adsX : offsets.hipX;
+          const adsTargetY = state.isADS ? offsets.adsY : offsets.hipY;
+          const adsTargetZ = state.isADS ? offsets.adsZ : offsets.hipZ;
+          gunGroup.position.x +=
+            (adsTargetX + bobX + meleeOffsetX - gunGroup.position.x) *
+            Math.min(1, dt * 16);
+          gunGroup.position.y +=
+            (adsTargetY + bobY + reloadOffsetY - gunGroup.position.y) *
+            Math.min(1, dt * 16);
+          gunGroup.position.z +=
+            (adsTargetZ +
+              gunRecoil.current +
+              meleeOffsetZ -
+              gunGroup.position.z) *
+            Math.min(1, dt * 16);
+          gunGroup.rotation.x =
+            -gunRecoil.current * 1.8 + reloadRotX + meleeRotX;
+          gunGroup.rotation.z = meleeRotZ;
+
+          // マズルフラッシュ用ライトを現在の銃の位置に追従させる
+          if (muzzleLight.obj) {
+            muzzleLight.obj.position.set(
+              gunGroup.position.x,
+              gunGroup.position.y + 0.03,
+              gunGroup.position.z - 0.55
+            );
+          }
+        }
+
+        // ---------- 敵 ----------
+        const ENEMY_TYPES = {
+          grunt: {
+            hp: 60,
+            speed: 3.2,
+            color: 0xff2a8e,
+            scale: 1.0,
+            damage: 8,
+            attackRange: 2.2,
+            attackCooldown: 1.0,
+            score: 100,
+            behavior: 'melee',
+          },
+          runner: {
+            hp: 35,
+            speed: 5.6,
+            color: 0xf7ff3a,
+            scale: 0.8,
+            damage: 6,
+            attackRange: 1.8,
+            attackCooldown: 0.7,
+            score: 130,
+            behavior: 'melee',
+          },
+          heavy: {
+            hp: 160,
+            speed: 2.0,
+            color: 0x00f0ff,
+            scale: 1.5,
+            damage: 16,
+            attackRange: 2.6,
+            attackCooldown: 1.4,
+            score: 220,
+            behavior: 'melee',
+          },
+          // 飛行タイプ: 空中をホバーしながら接近、上空から飛びかかる
+          flyer: {
+            hp: 45,
+            speed: 4.5,
+            color: 0xb44dff,
+            scale: 0.9,
+            damage: 12,
+            attackRange: 2.0,
+            attackCooldown: 1.2,
+            score: 180,
+            behavior: 'fly',
+            hoverHeight: 4.5,
+            diveSpeed: 14,
+          },
+          // 遠距離タイプ: 一定距離を保ちながらエネルギー弾を発射
+          shooter: {
+            hp: 55,
+            speed: 2.4,
+            color: 0xff7700,
+            scale: 1.0,
+            damage: 14,
+            attackRange: 22,
+            attackCooldown: 1.8,
+            score: 200,
+            behavior: 'ranged',
+            preferDist: 14,
+            projectileSpeed: 18,
+          },
+          // 突進タイプ: 一定距離から全速で体当たり。当たると大ダメージ+ノックバック
+          charger: {
+            hp: 90,
+            speed: 2.8,
+            color: 0x00ff88,
+            scale: 1.2,
+            damage: 30,
+            attackRange: 2.4,
+            attackCooldown: 2.2,
+            score: 210,
+            behavior: 'charge',
+            chargeRange: 16,
+            chargeSpeed: 18,
+            chargeCooldown: 3.5,
+          },
+          // 自爆タイプ: 接近すると膨張して爆発
+          bomber: {
+            hp: 40,
+            speed: 4.8,
+            color: 0xff3b3b,
+            scale: 0.85,
+            damage: 80,
+            attackRange: 2.0,
+            attackCooldown: 99,
+            score: 160,
+            behavior: 'explode',
+            fuseRange: 2.8,
+            fuseTime: 1.2,
+          },
+        };
+
+        const AMMO_CRATE_TYPES = [
+          { amount: 10, weight: 5, color: 0x00f0ff, label: '+10' },
+          { amount: 40, weight: 3, color: 0xf7ff3a, label: '+40' },
+          { amount: 80, weight: 1, color: 0xff2a8e, label: '+80' },
+        ];
+
+        // 武器クレート: ライフルは初期装備なので対象外(拳銃/ショットガンのみ抽選)
+        const WEAPON_CRATE_TYPES = [
+          { defKey: 'pistol', weight: 5 },
+          { defKey: 'shotgun', weight: 3 },
+          { defKey: 'sniper', weight: 2 },
+        ];
+
+        function createEnemyMesh(type) {
+          const def = ENEMY_TYPES[type];
+          const group = new THREE.Group();
+          const bodyMat = new THREE.MeshStandardMaterial({
+            color: 0x10141f,
+            emissive: def.color,
+            emissiveIntensity: 0.55,
+            roughness: 0.4,
+            metalness: 0.5,
+          });
+          const coreMat = new THREE.MeshBasicMaterial({ color: def.color });
+
+          let legL, legR;
+
+          if (def.behavior === 'fly') {
+            // 飛行タイプ: 翼付きの菱形ボディ
+            const torso = new THREE.Mesh(
+              new THREE.OctahedronGeometry(0.4, 0),
+              bodyMat
+            );
+            torso.position.y = 1.0;
+            group.add(torso);
+            const wingGeo = new THREE.BoxGeometry(1.0, 0.05, 0.3);
+            const wingL = new THREE.Mesh(
+              wingGeo,
+              new THREE.MeshBasicMaterial({
+                color: def.color,
+                transparent: true,
+                opacity: 0.5,
+              })
+            );
+            wingL.position.set(-0.6, 1.0, 0);
+            group.add(wingL);
+            const wingR = wingL.clone();
+            wingR.position.x = 0.6;
+            group.add(wingR);
+            // legL/legRの代わりに翼をアニメさせるため同名で格納
+            legL = wingL;
+            legR = wingR;
+          } else if (def.behavior === 'ranged') {
+            // 遠距離タイプ: 砲塔っぽい見た目
+            const torso = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.3, 0.4, 1.0, 8),
+              bodyMat
+            );
+            torso.position.y = 0.8;
+            group.add(torso);
+            const cannon = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.08, 0.08, 0.5, 8),
+              coreMat
+            );
+            cannon.rotation.x = Math.PI / 2;
+            cannon.position.set(0, 1.2, -0.45);
+            group.add(cannon);
+            const legGeo = new THREE.BoxGeometry(0.18, 0.6, 0.18);
+            legL = new THREE.Mesh(legGeo, bodyMat);
+            legL.position.set(-0.22, 0.3, 0);
+            group.add(legL);
+            legR = new THREE.Mesh(legGeo, bodyMat);
+            legR.position.set(0.22, 0.3, 0);
+            group.add(legR);
+          } else if (def.behavior === 'charge') {
+            // 突進タイプ: 前傾みのある横幅広いボディ
+            const torso = new THREE.Mesh(
+              new THREE.BoxGeometry(1.0, 0.9, 0.5),
+              bodyMat
+            );
+            torso.position.y = 1.0;
+            group.add(torso);
+            // 角(突進の演出用)
+            const hornGeo = new THREE.ConeGeometry(0.08, 0.35, 6);
+            const hornMat = new THREE.MeshBasicMaterial({ color: def.color });
+            const horn = new THREE.Mesh(hornGeo, hornMat);
+            horn.rotation.x = -Math.PI / 2;
+            horn.position.set(0, 1.3, -0.55);
+            group.add(horn);
+            const legGeo = new THREE.BoxGeometry(0.25, 0.85, 0.25);
+            legL = new THREE.Mesh(legGeo, bodyMat);
+            legL.position.set(-0.28, 0.42, 0);
+            group.add(legL);
+            legR = new THREE.Mesh(legGeo, bodyMat);
+            legR.position.set(0.28, 0.42, 0);
+            group.add(legR);
+          } else if (def.behavior === 'explode') {
+            // 自爆タイプ: 丸い体、赤く点滅
+            const torso = new THREE.Mesh(
+              new THREE.SphereGeometry(0.45, 10, 10),
+              bodyMat
+            );
+            torso.position.y = 0.9;
+            group.add(torso);
+            const legGeo = new THREE.BoxGeometry(0.16, 0.55, 0.16);
+            legL = new THREE.Mesh(legGeo, bodyMat);
+            legL.position.set(-0.18, 0.3, 0);
+            group.add(legL);
+            legR = new THREE.Mesh(legGeo, bodyMat);
+            legR.position.set(0.18, 0.3, 0);
+            group.add(legR);
+          } else {
+            // デフォルト(grunt/runner/heavy): 既存と同じ
+            const torso = new THREE.Mesh(
+              new THREE.BoxGeometry(0.7, 1.0, 0.4),
+              bodyMat
+            );
+            torso.position.y = 1.0;
+            group.add(torso);
+            const head = new THREE.Mesh(
+              new THREE.IcosahedronGeometry(0.28, 0),
+              coreMat
+            );
+            head.position.y = 1.7;
+            group.add(head);
+            const legGeo = new THREE.BoxGeometry(0.22, 0.8, 0.22);
+            legL = new THREE.Mesh(legGeo, bodyMat);
+            legL.position.set(-0.2, 0.4, 0);
+            group.add(legL);
+            legR = new THREE.Mesh(legGeo, bodyMat);
+            legR.position.set(0.2, 0.4, 0);
+            group.add(legR);
+            const armGeo = new THREE.BoxGeometry(0.18, 0.7, 0.18);
+            const armL = new THREE.Mesh(armGeo, bodyMat);
+            armL.position.set(-0.48, 1.05, 0);
+            group.add(armL);
+            const armR = new THREE.Mesh(armGeo, bodyMat);
+            armR.position.set(0.48, 1.05, 0);
+            group.add(armR);
+          }
+
+          // 共通コア
+          const core = new THREE.Mesh(
+            new THREE.SphereGeometry(0.14, 8, 8),
+            coreMat
+          );
+          core.position.y = 1.0;
+          group.add(core);
+
+          group.scale.setScalar(def.scale);
+
+          const hitboxGeo = new THREE.BoxGeometry(
+            0.9 * def.scale,
+            2.1 * def.scale,
+            0.9 * def.scale
+          );
+          const hitboxMat = new THREE.MeshBasicMaterial({ visible: false });
+          const hitbox = new THREE.Mesh(hitboxGeo, hitboxMat);
+          hitbox.position.y = 1.0 * def.scale;
+
+          return { group, hitbox, core, legL, legR };
+        }
+
+        function pickWeightedCrateType() {
+          const totalWeight = AMMO_CRATE_TYPES.reduce(
+            (sum, t) => sum + t.weight,
+            0
+          );
+          let r = Math.random() * totalWeight;
+          for (const t of AMMO_CRATE_TYPES) {
+            if (r < t.weight) return t;
+            r -= t.weight;
+          }
+          return AMMO_CRATE_TYPES[0];
+        }
+
+        function createAmmoCrateMesh(typeDef) {
+          const group = new THREE.Group();
+
+          const crateMat = new THREE.MeshStandardMaterial({
+            color: 0x1a1f2b,
+            roughness: 0.4,
+            metalness: 0.6,
+            emissive: typeDef.color,
+            emissiveIntensity: 0.5,
+          });
+          const box = new THREE.Mesh(
+            new THREE.BoxGeometry(0.6, 0.5, 0.6),
+            crateMat
+          );
+          box.position.y = 0.25;
+          group.add(box);
+
+          // ふた部分の発光ライン
+          const stripeMat = new THREE.MeshBasicMaterial({
+            color: typeDef.color,
+          });
+          const stripe = new THREE.Mesh(
+            new THREE.BoxGeometry(0.64, 0.06, 0.64),
+            stripeMat
+          );
+          stripe.position.y = 0.5;
+          group.add(stripe);
+
+          // 上に浮く弾薬マークの簡易表示(ひし形)
+          const markerGeo = new THREE.OctahedronGeometry(0.14, 0);
+          const markerMat = new THREE.MeshBasicMaterial({
+            color: typeDef.color,
+          });
+          const marker = new THREE.Mesh(markerGeo, markerMat);
+          marker.position.y = 0.9;
+          group.add(marker);
+
+          return { group, marker, box };
+        }
+
+        function spawnAmmoCrate() {
+          const typeDef = pickWeightedCrateType();
+          const parts = createAmmoCrateMesh(typeDef);
+
+          // アリーナ内のランダムな位置(障害物と重ならないよう簡易チェック)
+          const half = ARENA_SIZE / 2 - 4;
+          let x,
+            z,
+            tries = 0;
+          let blocked;
+          do {
+            x = (Math.random() - 0.5) * 2 * half;
+            z = (Math.random() - 0.5) * 2 * half;
+            blocked = false;
+            for (const c of collidables) {
+              const b = c.box;
+              if (
+                x + 0.6 > b.min.x &&
+                x - 0.6 < b.max.x &&
+                z + 0.6 > b.min.z &&
+                z - 0.6 < b.max.z
+              ) {
+                blocked = true;
+                break;
+              }
+            }
+            tries++;
+          } while (blocked && tries < 12);
+
+          parts.group.position.set(x, 0, z);
+          scene.add(parts.group);
+
+          ammoCrates.push({
+            group: parts.group,
+            marker: parts.marker,
+            amount: typeDef.amount,
+            label: typeDef.label,
+            color: typeDef.color,
+            spinPhase: Math.random() * Math.PI * 2,
+            collected: false,
+          });
+        }
+
+        // ---------- グレネードクレート(弾薬と同じ仕組みでグレネードを補充) ----------
+        function createGrenadeCrateMesh() {
+          const group = new THREE.Group();
+          const crateMat = new THREE.MeshStandardMaterial({
+            color: 0x2b1a1a,
+            roughness: 0.4,
+            metalness: 0.55,
+            emissive: 0xff3b3b,
+            emissiveIntensity: 0.5,
+          });
+          const box = new THREE.Mesh(
+            new THREE.BoxGeometry(0.55, 0.45, 0.55),
+            crateMat
+          );
+          box.position.y = 0.225;
+          group.add(box);
+
+          const stripeMat = new THREE.MeshBasicMaterial({ color: 0xff3b3b });
+          const stripe = new THREE.Mesh(
+            new THREE.BoxGeometry(0.59, 0.05, 0.59),
+            stripeMat
+          );
+          stripe.position.y = 0.45;
+          group.add(stripe);
+
+          const markerGeo = new THREE.SphereGeometry(0.1, 8, 8);
+          const markerMat = new THREE.MeshBasicMaterial({ color: 0xff3b3b });
+          const marker = new THREE.Mesh(markerGeo, markerMat);
+          marker.position.y = 0.85;
+          group.add(marker);
+
+          return { group, marker, box };
+        }
+
+        const GRENADE_CRATE_TYPES = [
+          { amount: 5, weight: 5 },
+          { amount: 2, weight: 3 },
+          { amount: 15, weight: 1 },
+        ];
+
+        function pickWeightedGrenadeCrateType() {
+          const totalWeight = GRENADE_CRATE_TYPES.reduce(
+            (sum, t) => sum + t.weight,
+            0
+          );
+          let r = Math.random() * totalWeight;
+          for (const t of GRENADE_CRATE_TYPES) {
+            if (r < t.weight) return t;
+            r -= t.weight;
+          }
+          return GRENADE_CRATE_TYPES[0];
+        }
+
+        function spawnGrenadeCrate() {
+          const typeDef = pickWeightedGrenadeCrateType();
+          const parts = createGrenadeCrateMesh();
+
+          const half = ARENA_SIZE / 2 - 4;
+          let x,
+            z,
+            tries = 0;
+          let blocked;
+          do {
+            x = (Math.random() - 0.5) * 2 * half;
+            z = (Math.random() - 0.5) * 2 * half;
+            blocked = false;
+            for (const c of collidables) {
+              const b = c.box;
+              if (
+                x + 0.55 > b.min.x &&
+                x - 0.55 < b.max.x &&
+                z + 0.55 > b.min.z &&
+                z - 0.55 < b.max.z
+              ) {
+                blocked = true;
+                break;
+              }
+            }
+            tries++;
+          } while (blocked && tries < 12);
+
+          parts.group.position.set(x, 0, z);
+          scene.add(parts.group);
+
+          grenadeCrates.push({
+            group: parts.group,
+            marker: parts.marker,
+            amount: typeDef.amount,
+            spinPhase: Math.random() * Math.PI * 2,
+            collected: false,
+          });
+        }
+
+        function updateGrenadeSpawning(dt) {
+          grenadeSpawnState.timer -= dt;
+          if (grenadeSpawnState.timer <= 0) {
+            spawnGrenadeCrate();
+            const [min, max] = grenadeSpawnState.interval;
+            grenadeSpawnState.timer = min + Math.random() * (max - min);
+          }
+        }
+
+        function updateGrenadeCrates(dt) {
+          for (let i = grenadeCrates.length - 1; i >= 0; i--) {
+            const crate = grenadeCrates[i];
+            if (crate.collected) continue;
+
+            crate.spinPhase += dt * 2;
+            crate.marker.rotation.y += dt * 2.4;
+            crate.marker.position.y = 0.85 + Math.sin(crate.spinPhase) * 0.06;
+
+            const dx = camera.position.x - crate.group.position.x;
+            const dz = camera.position.z - crate.group.position.z;
+            const dist = Math.hypot(dx, dz);
+
+            if (dist < 1.4) {
+              collectGrenadeCrate(crate);
+              grenadeCrates.splice(i, 1);
+            }
+          }
+        }
+
+        function collectGrenadeCrate(crate) {
+          crate.collected = true;
+          player.grenades = Math.min(
+            GRENADE_DEF.maxCarry,
+            player.grenades + crate.amount
+          );
+          updateGrenadeUI();
+
+          spawnImpactParticles(
+            crate.group.position.clone().add(new THREE.Vector3(0, 0.5, 0)),
+            0xff3b3b
+          );
+
+          addCrateFeed(`グレネード +${crate.amount}`);
+          scene.remove(crate.group);
+        }
+
+        // ---------- 武器クレート(アイテムボックスから拳銃/ショットガンを入手) ----------
+        function pickWeightedWeaponCrateType() {
+          const totalWeight = WEAPON_CRATE_TYPES.reduce(
+            (sum, t) => sum + t.weight,
+            0
+          );
+          let r = Math.random() * totalWeight;
+          for (const t of WEAPON_CRATE_TYPES) {
+            if (r < t.weight) return t;
+            r -= t.weight;
+          }
+          return WEAPON_CRATE_TYPES[0];
+        }
+
+        function createWeaponCrateMesh(typeDef) {
+          const def = WEAPON_DEFS[typeDef.defKey];
+          const group = new THREE.Group();
+
+          // 武器クレートは弾薬クレートよりやや大きく、縦長のケース型にして区別する
+          const crateMat = new THREE.MeshStandardMaterial({
+            color: 0x1f1a2b,
+            roughness: 0.35,
+            metalness: 0.65,
+            emissive: def.crateColor,
+            emissiveIntensity: 0.55,
+          });
+          const box = new THREE.Mesh(
+            new THREE.BoxGeometry(0.7, 0.62, 0.42),
+            crateMat
+          );
+          box.position.y = 0.31;
+          group.add(box);
+
+          // ケース上部の発光ライン(2本、武器ケースらしさを演出)
+          const stripeMat = new THREE.MeshBasicMaterial({
+            color: def.crateColor,
+          });
+          const stripe1 = new THREE.Mesh(
+            new THREE.BoxGeometry(0.74, 0.05, 0.05),
+            stripeMat
+          );
+          stripe1.position.set(0, 0.62, -0.1);
+          group.add(stripe1);
+          const stripe2 = stripe1.clone();
+          stripe2.position.z = 0.1;
+          group.add(stripe2);
+
+          // 浮遊する武器シルエットマーカー(銃の形を簡略化したアイコン)
+          const markerGroup = new THREE.Group();
+          const markerMat = new THREE.MeshBasicMaterial({
+            color: def.crateColor,
+          });
+          const markerBody = new THREE.Mesh(
+            new THREE.BoxGeometry(0.22, 0.06, 0.06),
+            markerMat
+          );
+          markerGroup.add(markerBody);
+          const markerGrip = new THREE.Mesh(
+            new THREE.BoxGeometry(0.05, 0.1, 0.05),
+            markerMat
+          );
+          markerGrip.position.set(0.06, -0.07, 0);
+          markerGroup.add(markerGrip);
+          markerGroup.position.y = 0.98;
+          group.add(markerGroup);
+
+          return { group, marker: markerGroup, box };
+        }
+
+        function spawnWeaponCrate() {
+          const typeDef = pickWeightedWeaponCrateType();
+          const parts = createWeaponCrateMesh(typeDef);
+
+          // アリーナ内のランダムな位置(障害物と重ならないよう簡易チェック)
+          const half = ARENA_SIZE / 2 - 4;
+          let x,
+            z,
+            tries = 0;
+          let blocked;
+          do {
+            x = (Math.random() - 0.5) * 2 * half;
+            z = (Math.random() - 0.5) * 2 * half;
+            blocked = false;
+            for (const c of collidables) {
+              const b = c.box;
+              if (
+                x + 0.7 > b.min.x &&
+                x - 0.7 < b.max.x &&
+                z + 0.7 > b.min.z &&
+                z - 0.7 < b.max.z
+              ) {
+                blocked = true;
+                break;
+              }
+            }
+            tries++;
+          } while (blocked && tries < 12);
+
+          parts.group.position.set(x, 0, z);
+          scene.add(parts.group);
+
+          weaponCrates.push({
+            group: parts.group,
+            marker: parts.marker,
+            defKey: typeDef.defKey,
+            spinPhase: Math.random() * Math.PI * 2,
+            collected: false,
+          });
+        }
+
+        function updateWeaponSpawning(dt) {
+          weaponSpawnState.timer -= dt;
+          if (weaponSpawnState.timer <= 0) {
+            spawnWeaponCrate();
+            const [min, max] = weaponSpawnState.interval;
+            weaponSpawnState.timer = min + Math.random() * (max - min);
+          }
+        }
+
+        function updateWeaponCrates(dt) {
+          for (let i = weaponCrates.length - 1; i >= 0; i--) {
+            const crate = weaponCrates[i];
+            if (crate.collected) continue;
+
+            // 見た目演出: マーカーを回転・浮遊させる
+            crate.spinPhase += dt * 2;
+            crate.marker.rotation.y += dt * 2.0;
+            crate.marker.position.y = 0.98 + Math.sin(crate.spinPhase) * 0.07;
+
+            // プレイヤーとの距離判定(回収)
+            const dx = camera.position.x - crate.group.position.x;
+            const dz = camera.position.z - crate.group.position.z;
+            const dist = Math.hypot(dx, dz);
+
+            if (dist < 1.5) {
+              collectWeaponCrate(crate);
+              weaponCrates.splice(i, 1);
+            }
+          }
+        }
+
+        function collectWeaponCrate(crate) {
+          crate.collected = true;
+          const def = WEAPON_DEFS[crate.defKey];
+          const alreadyOwned = ownsWeapon(crate.defKey);
+
+          if (alreadyOwned) {
+            // 既に所持している武器なら予備弾薬を補給
+            const w = weaponInventory[indexOfWeapon(crate.defKey)];
+            w.ammoReserve += def.magSize * 2;
+            addWeaponPickupFeed(`${def.name} 弾薬を補給`);
+          } else {
+            // 新規入手: インベントリに追加し、自動的に持ち替える
+            weaponInventory.push(
+              createWeaponInstance(crate.defKey, def.magSize * 3)
+            );
+            addWeaponPickupFeed(`新武器入手: ${def.name}`);
+            switchToWeaponIndex(weaponInventory.length - 1);
+          }
+          updateAmmoUI();
+          updateWeaponSlotsUI();
+
+          spawnImpactParticles(
+            crate.group.position.clone().add(new THREE.Vector3(0, 0.6, 0)),
+            def.crateColor
+          );
+
+          scene.remove(crate.group);
+        }
+
+        function addWeaponPickupFeed(text) {
+          const div = document.createElement('div');
+          div.className = 'kill-msg pickup-msg';
+          div.textContent = text;
+          dom.killFeed.appendChild(div);
+          setTimeout(() => div.remove(), 2300);
+        }
+
+        function spawnEnemy() {
+          let typeWeights;
+          if (state.wave <= 2)
+            typeWeights = ['grunt', 'grunt', 'grunt', 'runner', 'bomber'];
+          else if (state.wave <= 4)
+            typeWeights = ['grunt', 'runner', 'heavy', 'flyer', 'bomber'];
+          else if (state.wave <= 7)
+            typeWeights = ['runner', 'heavy', 'flyer', 'shooter', 'charger'];
+          else
+            typeWeights = [
+              'heavy',
+              'flyer',
+              'shooter',
+              'charger',
+              'bomber',
+              'charger',
+            ];
+
+          const type =
+            typeWeights[Math.floor(Math.random() * typeWeights.length)];
+          const def = ENEMY_TYPES[type];
+
+          const parts = createEnemyMesh(type);
+
+          // アリーナ縁付近にスポーン
+          const half = ARENA_SIZE / 2 - 3;
+          let x, z;
+          let tries = 0;
+          do {
+            const edge = Math.floor(Math.random() * 4);
+            if (edge === 0) {
+              x = (Math.random() - 0.5) * ARENA_SIZE;
+              z = -half;
+            } else if (edge === 1) {
+              x = (Math.random() - 0.5) * ARENA_SIZE;
+              z = half;
+            } else if (edge === 2) {
+              x = -half;
+              z = (Math.random() - 0.5) * ARENA_SIZE;
+            } else {
+              x = half;
+              z = (Math.random() - 0.5) * ARENA_SIZE;
+            }
+            tries++;
+          } while (
+            Math.hypot(x - camera.position.x, z - camera.position.z) < 8 &&
+            tries < 10
+          );
+
+          parts.group.position.set(x, 0, z);
+          parts.hitbox.position.x = x;
+          parts.hitbox.position.z = z;
+
+          scene.add(parts.group);
+          scene.add(parts.hitbox);
+
+          const enemy = {
+            type,
+            group: parts.group,
+            hitbox: parts.hitbox,
+            core: parts.core,
+            legL: parts.legL,
+            legR: parts.legR,
+            hp: def.hp,
+            maxHp: def.hp,
+            speed: def.speed,
+            damage: def.damage,
+            attackRange: def.attackRange,
+            attackCooldown: def.attackCooldown,
+            attackTimer: Math.random() * 0.5,
+            score: def.score,
+            alive: true,
+            walkPhase: Math.random() * Math.PI * 2,
+            flashTimer: 0,
+            yVelocity: 0,
+            groundY: 0,
+            onGround: true,
+            jumpCooldown: 1.0 + Math.random() * 1.5,
+            flyPhase: Math.random() * Math.PI * 2,
+            divingToPlayer: false,
+            diveTarget: null,
+            chargeTimer:
+              def.behavior === 'charge' ? def.chargeCooldown * 0.5 : 0,
+            isCharging: false,
+            chargeDir: null,
+            fuseTimer: -1,
+            fuseActive: false,
+          };
+          enemies.push(enemy);
+          state.enemiesAlive++;
+        }
+
+        function damageEnemy(enemy, dmg) {
+          if (!enemy.alive) return;
+          enemy.hp -= dmg;
+          enemy.flashTimer = 0.08;
+          if (enemy.hp <= 0) {
+            killEnemy(enemy);
+          }
+        }
+
+        function killEnemy(enemy) {
+          enemy.alive = false;
+          state.enemiesAlive--;
+          state.kills++;
+          state.score += enemy.score;
+          updateScoreUI();
+
+          spawnImpactParticles(
+            enemy.group.position.clone().add(new THREE.Vector3(0, 1, 0)),
+            ENEMY_TYPES[enemy.type].color
+          );
+
+          if (Math.random() < COIN_DROP_CHANCE) {
+            const coinAmount =
+              15 +
+              Math.floor(Math.random() * 30) +
+              Math.floor(state.wave * 1.5);
+            spawnCoinDrop(enemy.group.position.clone(), coinAmount);
+          }
+          scene.remove(enemy.group);
+          scene.remove(enemy.hitbox);
+          addKillFeed(enemy.type);
+          updateEnemiesLeftUI();
+
+          if (
+            state.enemiesAlive <= 0 &&
+            state.enemiesToSpawn <= 0 &&
+            state.waveActive
+          ) {
+            onWaveClear();
+          }
+        }
+
+        function addKillFeed(type) {
+          const names = {
+            grunt: 'グラント',
+            runner: 'ランナー',
+            heavy: 'ヘビー',
+          };
+          const div = document.createElement('div');
+          div.className = 'kill-msg';
+          div.textContent = `${names[type]} を撃破 +${ENEMY_TYPES[type].score}`;
+          dom.killFeed.appendChild(div);
+          setTimeout(() => div.remove(), 2300);
+        }
+
+        // 修正後
+        const ENEMY_GRAVITY = -24.0;
+        const ENEMY_JUMP_VELOCITY = 13.5;
+
+        function updateEnemies(dt) {
+          for (const enemy of enemies) {
+            if (!enemy.alive) continue;
+
+            const def = ENEMY_TYPES[enemy.type];
+            const pos = enemy.group.position;
+            const toPlayer = new THREE.Vector3(
+              camera.position.x - pos.x,
+              0,
+              camera.position.z - pos.z
+            );
+            const dist = toPlayer.length();
+
+            // ヒットフラッシュ
+            if (enemy.flashTimer > 0) {
+              enemy.flashTimer -= dt;
+              enemy.core.material.color.setHex(0xffffff);
+            } else {
+              enemy.core.material.color.setHex(def.color);
+            }
+
+            // behavior 別に処理を委譲
+            if (def.behavior === 'fly') {
+              updateEnemyFlyer(enemy, def, dt, pos, toPlayer, dist);
+            } else if (def.behavior === 'ranged') {
+              updateEnemyShooter(enemy, def, dt, pos, toPlayer, dist);
+            } else if (def.behavior === 'charge') {
+              updateEnemyCharger(enemy, def, dt, pos, toPlayer, dist);
+            } else if (def.behavior === 'explode') {
+              updateEnemyBomber(enemy, def, dt, pos, toPlayer, dist);
+            } else {
+              updateEnemyMelee(enemy, def, dt, pos, toPlayer, dist);
+            }
+
+            // hitbox 同期（全タイプ共通）
+            enemy.hitbox.position.x = pos.x;
+            enemy.hitbox.position.z = pos.z;
+            enemy.hitbox.position.y = 1.0 * def.scale + pos.y;
+            enemy.core.position.y =
+              1.0 +
+              Math.sin(performance.now() * 0.004 + enemy.walkPhase) * 0.03;
+          }
+        }
+
+        function updateEnemyMelee(enemy, def, dt, pos, toPlayer, dist) {
+          if (enemy.jumpCooldown > 0) enemy.jumpCooldown -= dt;
+
+          if (dist > def.attackRange) {
+            toPlayer.normalize();
+            const moveStep = def.speed * dt;
+            const nextX = pos.x + toPlayer.x * moveStep;
+            const nextZ = pos.z + toPlayer.z * moveStep;
+            let blockingBox = null;
+            for (const c of collidables) {
+              const b = c.box,
+                r = 0.5;
+              if (
+                nextX + r > b.min.x &&
+                nextX - r < b.max.x &&
+                nextZ + r > b.min.z &&
+                nextZ - r < b.max.z
+              ) {
+                blockingBox = b;
+                break;
+              }
+            }
+            if (!blockingBox) {
+              pos.x = nextX;
+              pos.z = nextZ;
+            } else {
+              const obstacleTop = blockingBox.max.y;
+              const stepNeeded = obstacleTop - enemy.groundY;
+              const maxJumpH =
+                (ENEMY_JUMP_VELOCITY * ENEMY_JUMP_VELOCITY) /
+                (2 * -ENEMY_GRAVITY);
+              if (stepNeeded > 0.3 && stepNeeded <= maxJumpH * 0.95) {
+                if (enemy.onGround && enemy.jumpCooldown <= 0) {
+                  enemy.yVelocity = ENEMY_JUMP_VELOCITY;
+                  enemy.onGround = false;
+                  enemy.jumpCooldown = 1.2 + Math.random() * 0.6;
+                  pos.x = nextX;
+                  pos.z = nextZ;
+                } else if (!enemy.onGround && pos.y >= obstacleTop - 0.15) {
+                  pos.x = nextX;
+                  pos.z = nextZ;
+                } else {
+                  enemy.walkPhase += dt * def.speed * 2;
+                  enemy.legL.rotation.x = Math.sin(enemy.walkPhase) * 0.3;
+                  enemy.legR.rotation.x = -Math.sin(enemy.walkPhase) * 0.3;
+                }
+              } else {
+                pos.x += -toPlayer.z * moveStep;
+                pos.z += toPlayer.x * moveStep;
+              }
+            }
+            enemy.group.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+            enemy.walkPhase += dt * def.speed * 2;
+            enemy.legL.rotation.x = Math.sin(enemy.walkPhase) * 0.4;
+            enemy.legR.rotation.x = -Math.sin(enemy.walkPhase) * 0.4;
+          } else {
+            enemy.attackTimer -= dt;
+            const heightDiff = Math.abs(
+              enemy.groundY - (camera.position.y - player.height)
+            );
+            if (enemy.attackTimer <= 0 && heightDiff < 1.2) {
+              enemy.attackTimer = def.attackCooldown;
+              damagePlayer(def.damage);
+            } else if (enemy.attackTimer <= 0) {
+              enemy.attackTimer = def.attackCooldown * 0.5;
+            }
+            enemy.group.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+          }
+          // 縦物理（共通）
+          applyEnemyGravity(enemy, dt, pos);
+        }
+
+        // ---- 飛行タイプ ----
+        function updateEnemyFlyer(enemy, def, dt, pos, toPlayer, dist) {
+          enemy.flyPhase += dt * 2.2;
+          const targetY = def.hoverHeight + Math.sin(enemy.flyPhase) * 0.8;
+
+          if (!enemy.divingToPlayer) {
+            // 通常: 水平接近 + ホバー高度維持
+            if (dist > 4) {
+              toPlayer.normalize();
+              pos.x += toPlayer.x * def.speed * dt;
+              pos.z += toPlayer.z * def.speed * dt;
+            }
+            pos.y += (targetY - pos.y) * Math.min(1, dt * 4);
+
+            // 一定距離に近づいたら急降下攻撃
+            if (dist < 7 && enemy.attackTimer <= 0) {
+              enemy.divingToPlayer = true;
+              enemy.diveTarget = camera.position.clone();
+            }
+          } else {
+            // 急降下
+            const diveDir = new THREE.Vector3()
+              .subVectors(enemy.diveTarget, pos)
+              .normalize();
+            pos.x += diveDir.x * def.diveSpeed * dt;
+            pos.z += diveDir.z * def.diveSpeed * dt;
+            pos.y += diveDir.y * def.diveSpeed * dt;
+
+            if (dist < def.attackRange || pos.y <= 0.5) {
+              if (dist < def.attackRange) damagePlayer(def.damage);
+              enemy.divingToPlayer = false;
+              enemy.attackTimer = def.attackCooldown;
+              pos.y = Math.max(pos.y, 1.0);
+            }
+          }
+          enemy.group.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+          // 翼アニメ
+          if (enemy.legL)
+            enemy.legL.rotation.z = Math.sin(enemy.flyPhase * 3) * 0.4;
+          if (enemy.legR)
+            enemy.legR.rotation.z = -Math.sin(enemy.flyPhase * 3) * 0.4;
+
+          enemy.attackTimer -= dt;
+        }
+
+        // ---- 遠距離タイプ ----
+        const enemyProjectiles = []; // { mesh, vel, life }
+
+        function updateEnemyShooter(enemy, def, dt, pos, toPlayer, dist) {
+          applyEnemyGravity(enemy, dt, pos);
+
+          // 適正距離を保つ
+          const preferDist = def.preferDist;
+          if (dist < preferDist - 2) {
+            // 遠ざかる
+            toPlayer.normalize();
+            pos.x -= toPlayer.x * def.speed * dt;
+            pos.z -= toPlayer.z * def.speed * dt;
+          } else if (dist > preferDist + 4) {
+            // 近づく
+            toPlayer.normalize();
+            pos.x += toPlayer.x * def.speed * dt;
+            pos.z += toPlayer.z * def.speed * dt;
+          }
+          enemy.group.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+
+          // 射撃
+          enemy.attackTimer -= dt;
+          if (enemy.attackTimer <= 0 && dist < def.attackRange) {
+            enemy.attackTimer = def.attackCooldown;
+            fireEnemyProjectile(
+              pos.clone().add(new THREE.Vector3(0, 1.2, 0)),
+              def
+            );
+          }
+
+          // 脚アニメ
+          enemy.walkPhase += dt * def.speed;
+          if (enemy.legL)
+            enemy.legL.rotation.x = Math.sin(enemy.walkPhase) * 0.3;
+          if (enemy.legR)
+            enemy.legR.rotation.x = -Math.sin(enemy.walkPhase) * 0.3;
+        }
+
+        function fireEnemyProjectile(fromPos, def) {
+          const dir = new THREE.Vector3()
+            .subVectors(
+              camera.position.clone().add(new THREE.Vector3(0, 0.2, 0)),
+              fromPos
+            )
+            .normalize();
+
+          const geo = new THREE.SphereGeometry(0.13, 6, 6);
+          const mat = new THREE.MeshBasicMaterial({ color: def.color });
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.position.copy(fromPos);
+          scene.add(mesh);
+
+          enemyProjectiles.push({
+            mesh,
+            vel: dir.multiplyScalar(def.projectileSpeed),
+            life: 3.0,
+            damage: def.damage,
+          });
+        }
+
+        function updateEnemyProjectiles(dt) {
+          for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+            const p = enemyProjectiles[i];
+            p.life -= dt;
+            p.mesh.position.addScaledVector(p.vel, dt);
+
+            // プレイヤーとの当たり判定
+            if (p.mesh.position.distanceTo(camera.position) < 0.55) {
+              damagePlayer(p.damage);
+              scene.remove(p.mesh);
+              enemyProjectiles.splice(i, 1);
+              continue;
+            }
+            // 壁・障害物判定（簡易）
+            let hit = false;
+            for (const c of collidables) {
+              if (c.box.containsPoint(p.mesh.position)) {
+                hit = true;
+                break;
+              }
+            }
+            if (hit || p.life <= 0) {
+              spawnImpactParticles(p.mesh.position, 0xff7700);
+              scene.remove(p.mesh);
+              enemyProjectiles.splice(i, 1);
+            }
+          }
+        }
+
+        // ---- 突進タイプ ----
+        function updateEnemyCharger(enemy, def, dt, pos, toPlayer, dist) {
+          applyEnemyGravity(enemy, dt, pos);
+          enemy.chargeTimer -= dt;
+
+          if (enemy.isCharging) {
+            // 突進中
+            pos.x += enemy.chargeDir.x * def.chargeSpeed * dt;
+            pos.z += enemy.chargeDir.z * def.chargeSpeed * dt;
+
+            if (dist < def.attackRange) {
+              damagePlayer(def.damage);
+              // ノックバック
+              const kb = toPlayer.clone().normalize().multiplyScalar(-6);
+              camera.position.x += kb.x * dt * 8;
+              camera.position.z += kb.z * dt * 8;
+              enemy.isCharging = false;
+              enemy.chargeTimer = def.chargeCooldown;
+            }
+            // 壁や一定距離で突進終了
+            let blocked = false;
+            for (const c of collidables) {
+              const b = c.box,
+                r = 0.6;
+              if (
+                pos.x + r > b.min.x &&
+                pos.x - r < b.max.x &&
+                pos.z + r > b.min.z &&
+                pos.z - r < b.max.z
+              ) {
+                blocked = true;
+                break;
+              }
+            }
+            if (blocked || dist > def.chargeRange * 1.5) {
+              enemy.isCharging = false;
+              enemy.chargeTimer = def.chargeCooldown;
+            }
+          } else {
+            // 通常接近
+            if (dist > def.attackRange) {
+              toPlayer.normalize();
+              pos.x += toPlayer.x * def.speed * dt;
+              pos.z += toPlayer.z * def.speed * dt;
+            }
+            // 突進開始条件
+            if (
+              dist < def.chargeRange &&
+              dist > def.attackRange &&
+              enemy.chargeTimer <= 0
+            ) {
+              enemy.isCharging = true;
+              enemy.chargeDir = toPlayer.clone().normalize();
+            }
+            // 近接攻撃
+            enemy.attackTimer -= dt;
+            if (dist < def.attackRange && enemy.attackTimer <= 0) {
+              damagePlayer(def.damage * 0.5);
+              enemy.attackTimer = def.attackCooldown;
+            }
+          }
+          enemy.group.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+          enemy.walkPhase +=
+            dt * (enemy.isCharging ? def.chargeSpeed : def.speed);
+          if (enemy.legL)
+            enemy.legL.rotation.x = Math.sin(enemy.walkPhase) * 0.5;
+          if (enemy.legR)
+            enemy.legR.rotation.x = -Math.sin(enemy.walkPhase) * 0.5;
+        }
+
+        // ---- 自爆タイプ ----
+        function updateEnemyBomber(enemy, def, dt, pos, toPlayer, dist) {
+          applyEnemyGravity(enemy, dt, pos);
+
+          if (!enemy.fuseActive) {
+            // 通常接近
+            if (dist > def.fuseRange) {
+              toPlayer.normalize();
+              pos.x += toPlayer.x * def.speed * dt;
+              pos.z += toPlayer.z * def.speed * dt;
+            }
+            // 起爆範囲に入ったら導火線着火
+            if (dist < def.fuseRange) {
+              enemy.fuseActive = true;
+              enemy.fuseTimer = def.fuseTime;
+            }
+            enemy.walkPhase += dt * def.speed * 2;
+            if (enemy.legL)
+              enemy.legL.rotation.x = Math.sin(enemy.walkPhase) * 0.4;
+            if (enemy.legR)
+              enemy.legR.rotation.x = -Math.sin(enemy.walkPhase) * 0.4;
+          } else {
+            // 点滅しながらカウントダウン
+            enemy.fuseTimer -= dt;
+            const blink =
+              Math.sin(enemy.fuseTimer * Math.PI * (6 / def.fuseTime)) > 0;
+            enemy.core.material.color.setHex(blink ? 0xffffff : 0xff0000);
+            // 膨張演出
+            const scale =
+              def.scale + (1 - enemy.fuseTimer / def.fuseTime) * 0.5;
+            enemy.group.scale.setScalar(scale);
+
+            if (enemy.fuseTimer <= 0) {
+              // 爆発（grenadeと同じヘルパーを流用）
+              spawnExplosionVisual(pos.clone().add(new THREE.Vector3(0, 1, 0)));
+              if (camera.position.distanceTo(pos) < def.fuseRange * 1.5) {
+                damagePlayer(def.damage);
+              }
+              killEnemy(enemy);
+            }
+          }
+          enemy.group.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+        }
+
+        // ---- 共通: 敵の縦物理 ----
+        function applyEnemyGravity(enemy, dt, pos) {
+          if (ENEMY_TYPES[enemy.type].behavior === 'fly') return; // 飛行タイプは重力なし
+          enemy.yVelocity += ENEMY_GRAVITY * dt;
+          let landingY = 0;
+          for (const c of collidables) {
+            const b = c.box,
+              r = 0.4;
+            if (
+              pos.x + r > b.min.x &&
+              pos.x - r < b.max.x &&
+              pos.z + r > b.min.z &&
+              pos.z - r < b.max.z
+            ) {
+              if (b.max.y > landingY) landingY = b.max.y;
+            }
+          }
+          pos.y += enemy.yVelocity * dt;
+          if (pos.y <= landingY) {
+            pos.y = landingY;
+            enemy.yVelocity = 0;
+            enemy.onGround = true;
+            enemy.groundY = landingY;
+          } else {
+            enemy.onGround = false;
+          }
+        }
+
+        function updateAmmoSpawning(dt) {
+          ammoSpawnState.timer -= dt;
+          if (ammoSpawnState.timer <= 0) {
+            spawnAmmoCrate();
+            const [min, max] = ammoSpawnState.interval;
+            ammoSpawnState.timer = min + Math.random() * (max - min);
+          }
+        }
+
+        function updateAmmoCrates(dt) {
+          for (let i = ammoCrates.length - 1; i >= 0; i--) {
+            const crate = ammoCrates[i];
+            if (crate.collected) continue;
+
+            // 見た目演出: マーカーを回転・浮遊させる
+            crate.spinPhase += dt * 2;
+            crate.marker.rotation.y += dt * 2.4;
+            crate.marker.position.y = 0.9 + Math.sin(crate.spinPhase) * 0.06;
+
+            // プレイヤーとの距離判定(回収)
+            const dx = camera.position.x - crate.group.position.x;
+            const dz = camera.position.z - crate.group.position.z;
+            const dist = Math.hypot(dx, dz);
+
+            if (dist < 1.4) {
+              collectAmmoCrate(crate);
+              ammoCrates.splice(i, 1);
+            }
+          }
+        }
+
+        function collectAmmoCrate(crate) {
+          crate.collected = true;
+          currentWeapon().ammoReserve += crate.amount;
+          updateAmmoUI();
+
+          spawnImpactParticles(
+            crate.group.position.clone().add(new THREE.Vector3(0, 0.5, 0)),
+            crate.color
+          );
+
+          addCrateFeed(crate.label);
+          scene.remove(crate.group);
+        }
+
+        function addCrateFeed(label) {
+          const div = document.createElement('div');
+          div.className = 'kill-msg';
+          div.style.color = '#00f0ff';
+          div.textContent = `弾薬 ${label} を回収`;
+          dom.killFeed.appendChild(div);
+          setTimeout(() => div.remove(), 2300);
+        }
+
+        // ---------- ダメージ処理 ----------
+        function damagePlayer(amount) {
+          if (player.shield > 0) {
+            const absorbed = Math.min(player.shield, amount);
+            player.shield -= absorbed;
+            amount -= absorbed;
+          }
+          if (amount > 0) {
+            player.hp -= amount;
+          }
+          player.shieldRegenDelay = 3.0;
+
+          flashDamageVignette();
+          updateHpUI();
+
+          if (player.hp <= 0) {
+            player.hp = 0;
+            updateHpUI();
+            onPlayerDeath();
+          }
+        }
+
+        function flashDamageVignette() {
+          dom.damageVignette.style.opacity = '0.8';
+          clearTimeout(flashDamageVignette._t);
+          flashDamageVignette._t = setTimeout(() => {
+            dom.damageVignette.style.opacity = '0';
+          }, 220);
+        }
+
+        function updateShieldRegen(dt) {
+          if (player.shieldRegenDelay > 0) {
+            player.shieldRegenDelay -= dt;
+          } else if (player.shield < player.maxShield) {
+            player.shield = Math.min(player.maxShield, player.shield + 18 * dt);
+            updateHpUI();
+          }
+        }
+
+        // ---------- ウェーブ管理 ----------
+        function startWave() {
+          state.wave++;
+          state.enemiesToSpawn = 4 + state.wave * 2;
+          state.spawnTimer = 0;
+          state.waveActive = true;
+          dom.waveNumber.textContent = state.wave;
+          updateEnemiesLeftUI();
+        }
+
+        function updateSpawning(dt) {
+          if (!state.waveActive || state.enemiesToSpawn <= 0) return;
+          state.spawnTimer -= dt;
+          if (state.spawnTimer <= 0) {
+            spawnEnemy();
+            state.enemiesToSpawn--;
+            const spawnInterval = Math.max(0.35, 1.1 - state.wave * 0.04);
+            state.spawnTimer = spawnInterval;
+            updateEnemiesLeftUI();
+          }
+        }
+
+        function onWaveClear() {
+          state.waveActive = false;
+          dom.waveClearBanner.classList.remove('show');
+          void dom.waveClearBanner.offsetWidth; // reflow でアニメ再トリガー
+          dom.waveClearBanner.classList.add('show');
+
+          // ウェーブ間に弾薬とシールドを少し回復(所持中の全武器)
+          for (const w of weaponInventory) {
+            w.ammoReserve += Math.round(WEAPON_DEFS[w.defKey].magSize * 1.2);
+          }
+          player.shield = player.maxShield;
+          updateHpUI();
+          updateAmmoUI();
+
+          state.waveBreakTimer = 3.2;
+        }
+
+        function updateEnemiesLeftUI() {
+          const remaining = state.enemiesAlive + state.enemiesToSpawn;
+          dom.enemiesLeft.textContent = `残り敵数: ${remaining}`;
+        }
+
+        // ---------- UI更新 ----------
+        function updateHpUI() {
+          dom.hpFill.style.width = `${Math.max(
+            0,
+            (player.hp / player.maxHp) * 100
+          )}%`;
+          dom.hpNum.textContent = Math.ceil(Math.max(0, player.hp));
+          dom.shieldFill.style.width = `${Math.max(
+            0,
+            (player.shield / player.maxShield) * 100
+          )}%`;
+          dom.shieldNum.textContent = Math.ceil(Math.max(0, player.shield));
+
+          if (player.hp <= 30) {
+            dom.lowHpPulse.classList.add('active');
+          } else {
+            dom.lowHpPulse.classList.remove('active');
+          }
+        }
+
+        function updateAmmoUI() {
+          const w = currentWeapon();
+          const def = currentDef();
+          dom.ammoCurrent.textContent = w.ammoInMag;
+          dom.ammoReserve.textContent = w.ammoReserve;
+          dom.weaponName.textContent = def.name;
+        }
+
+        function updateGrenadeUI() {
+          dom.grenadeCount.textContent = player.grenades;
+        }
+
+        // ---------- ショップ UI 描画 ----------
+        function renderShopUI() {
+          dom.shopGridContainer.innerHTML = '';
+          for (const key in SHOP_UPGRADES) {
+            const def = SHOP_UPGRADES[key];
+            const lv = shopLevels[key];
+            const price = getUpgradePrice(key);
+            const isMaxed = lv >= def.maxLv;
+
+            const card = document.createElement('div');
+            card.className = 'shop-card';
+
+            const title = document.createElement('div');
+            title.className = 'shop-card-title';
+            title.textContent = def.label;
+            card.appendChild(title);
+
+            const desc = document.createElement('div');
+            desc.className = 'shop-card-desc';
+            desc.textContent = def.desc;
+            card.appendChild(desc);
+
+            const dots = document.createElement('div');
+            dots.className = 'shop-level-dots';
+            for (let i = 0; i < def.maxLv; i++) {
+              const pip = document.createElement('div');
+              pip.className = 'dot-pip' + (i < lv ? ' filled' : '');
+              dots.appendChild(pip);
+            }
+            card.appendChild(dots);
+
+            const btn = document.createElement('button');
+            btn.className = 'shop-buy-btn';
+            if (isMaxed) {
+              btn.textContent = 'MAX LEVEL';
+              btn.classList.add('maxed');
+              btn.disabled = true;
+            } else {
+              btn.textContent = `LV${lv + 1} 購入 — ${price} CR`;
+              btn.disabled = player.credits < price;
+              btn.addEventListener('click', () => {
+                if (purchaseUpgrade(key)) {
+                  renderShopUI(); // 再描画して価格・レベル更新
+                }
+              });
+            }
+            card.appendChild(btn);
+
+            dom.shopGridContainer.appendChild(card);
+          }
+        }
+
+        function closeShop() {
+          dom.shopScreen.classList.add('hidden');
+          state.shopOpenedFromHome = false;
+        }
+
+        function updateScoreUI() {
+          dom.scoreValue.textContent = state.score;
+        }
+
+        // ---------- パーティクル・エフェクト更新 ----------
+        function updateEffects(dt) {
+          for (let i = bullets.length - 1; i >= 0; i--) {
+            const b = bullets[i];
+            b.life -= dt;
+            const lifeRatio = Math.max(0, b.life / b.maxLife);
+
+            // 弾頭の移動（発射から終点まで線形補間）
+            const travelRatio = 1 - lifeRatio;
+            const traveled = b.dist * travelRatio;
+            const bulletPos = b.start.clone().addScaledVector(b.dir, traveled);
+            b.bulletMesh.position.copy(bulletPos);
+
+            // 光芒: 弾頭の少し後ろに追従
+            b.glow1.position.copy(bulletPos).addScaledVector(b.dir, -0.06);
+            b.glow2.position.copy(bulletPos).addScaledVector(b.dir, -0.14);
+            b.glowMat.opacity = lifeRatio * 0.7;
+
+            // 弾頭は終点に近づくと消える
+            b.bulletMesh.visible = b.life > 0.01;
+            b.glow1.visible = b.life > 0.01;
+            b.glow2.visible = b.life > 0.01;
+
+            // トレイルラインのフェードアウト
+            b.trailMat.opacity = lifeRatio * 0.55;
+
+            // マズルフラッシュ: 最初の数フレームのみ表示(コアは急速に縮小、外側閃光はゆっくり広がって消える)
+            b.flashLife -= dt;
+            if (b.flashLife > 0) {
+              const flashRatio = b.flashLife / 0.035;
+              b.flashMat.opacity = flashRatio;
+              b.flash.scale.setScalar(1 - flashRatio * 0.3);
+
+              b.flashGlowMat.opacity = flashRatio * 0.55;
+              const glowScale = 1 + (1 - flashRatio) * 1.8;
+              b.flashGlow.scale.set(glowScale, glowScale, glowScale * 1.6);
+            } else {
+              b.flash.visible = false;
+              b.flashGlow.visible = false;
+            }
+
+            if (b.life <= 0) {
+              scene.remove(b.trail);
+              scene.remove(b.bulletMesh);
+              scene.remove(b.glow1);
+              scene.remove(b.glow2);
+              scene.remove(b.flash);
+              scene.remove(b.flashGlow);
+              bullets.splice(i, 1);
+            }
+          }
+
+          for (let i = impactParticles.length - 1; i >= 0; i--) {
+            const p = impactParticles[i];
+            p.life -= dt;
+
+            if (p.isSpark) {
+              // 火花(線分)は移動させずその場でフェードアウトのみ(高速で短命なため)
+              p.sparkMat.opacity = Math.max(0, p.life / 0.15) * 0.9;
+              if (p.life <= 0) {
+                scene.remove(p.obj);
+                impactParticles.splice(i, 1);
+              }
+              continue;
+            }
+
+            p.vel.y -= 9 * dt;
+            p.obj.position.addScaledVector(p.vel, dt);
+            p.obj.scale.setScalar(Math.max(0, p.life / 0.35));
+            if (p.life <= 0) {
+              scene.remove(p.obj);
+              impactParticles.splice(i, 1);
+            }
+          }
+        }
+
+        // ---------- プレイヤー死亡・ゲーム終了 ----------
+        function onPlayerDeath() {
+          exitADS();
+          state.gameOver = true;
+          state.running = false;
+          document.exitPointerLock();
+
+          dom.resultTitle.textContent = 'MISSION FAILED';
+          dom.resultTitle.className = 'lose';
+          showResult();
+        }
+
+        function showResult() {
+          dom.finalWave.textContent = state.wave;
+          dom.finalKills.textContent = state.kills;
+          dom.finalScore.textContent = state.score;
+          dom.resultScreen.classList.remove('hidden');
+        }
+
+        function showPause() {
+          if (state.gameOver) return;
+          state.paused = true;
+          dom.pauseScreen.classList.remove('hidden');
+        }
+
+        function hidePause() {
+          state.paused = false;
+          dom.pauseScreen.classList.add('hidden');
+        }
+
+        // ---------- メインループ ----------
+        function animate() {
+          requestAnimationFrame(animate);
+          const dt = Math.min(clock.getDelta(), 0.05);
+
+          if (state.running && !state.paused && !state.gameOver) {
+            updatePlayer(dt);
+            updateWeapon(dt);
+            updateGunVisual(dt);
+            updateShieldRegen(dt);
+            updateEnemies(dt);
+            updateEnemyProjectiles(dt);
+            updateAmmoSpawning(dt);
+            updateAmmoCrates(dt);
+            updateWeaponSpawning(dt);
+            updateWeaponCrates(dt);
+            updateGrenades(dt);
+            updateGrenadeSpawning(dt);
+            updateGrenadeCrates(dt);
+            updateCoinPickups(dt); // ← 追加
+            updateEffects(dt);
+
+            if (state.waveActive) {
+              updateSpawning(dt);
+            } else if (state.wave > 0) {
+              state.waveBreakTimer -= dt;
+              if (state.waveBreakTimer <= 0) {
+                startWave();
+              }
+            }
+          }
+
+          renderer.render(scene, camera);
+        }
+
+        // ---------- ゲーム開始・リスタート ----------
+        function resetGameState() {
+          exitADS();
+          state.score = 0;
+          state.kills = 0;
+          state.wave = 0;
+          state.waveActive = false;
+          state.enemiesAlive = 0;
+          state.enemiesToSpawn = 0;
+          state.gameOver = false;
+          state.paused = false;
+
+          player.hp = player.maxHp;
+          player.shield = player.maxShield;
+          player.shieldRegenDelay = 0;
+          camera.position.set(0, player.height, 0);
+          camYaw = 0;
+          camPitch = 0;
+
+          weaponInventory = [createWeaponInstance('rifle', 144)];
+          currentWeaponIndex = 0;
+          setActiveGunModel('rifle');
+
+          // 既存の敵を全消去
+          for (const e of enemies) {
+            scene.remove(e.group);
+            scene.remove(e.hitbox);
+          }
+          enemies.length = 0;
+
+          for (const b of bullets) {
+            scene.remove(b.trail);
+            scene.remove(b.bulletMesh);
+            scene.remove(b.glow1);
+            scene.remove(b.glow2);
+            scene.remove(b.flash);
+          }
+          bullets.length = 0;
+
+          for (const p of enemyProjectiles) scene.remove(p.mesh);
+          enemyProjectiles.length = 0;
+
+          for (const p of impactParticles) scene.remove(p.obj);
+          impactParticles.length = 0;
+
+          for (const crate of ammoCrates) scene.remove(crate.group);
+          ammoCrates.length = 0;
+          ammoSpawnState.timer = 3.0;
+
+          for (const crate of weaponCrates) scene.remove(crate.group);
+          weaponCrates.length = 0;
+          weaponSpawnState.timer = 8.0;
+
+          for (const g of activeGrenades) scene.remove(g.group);
+          activeGrenades.length = 0;
+          grenadeThrowCooldown = 0;
+
+          for (const crate of grenadeCrates) scene.remove(crate.group);
+          grenadeCrates.length = 0;
+          grenadeSpawnState.timer = 12.0;
+
+          for (const c of coinPickups) scene.remove(c.group);
+          coinPickups.length = 0;
+
+          player.grenades = 2;
+
+          updateHpUI();
+          updateAmmoUI();
+          updateGrenadeUI();
+          updateScoreUI();
+          updateCreditsUI();
+          updateWeaponSlotsUI();
+          dom.waveNumber.textContent = '0';
+          dom.enemiesLeft.textContent = '残り敵数: -';
+          dom.killFeed.innerHTML = '';
+        }
+
+        function startGame() {
+          resetGameState();
+          state.running = true;
+          state.gameOver = false;
+          dom.startScreen.classList.add('hidden');
+          dom.resultScreen.classList.add('hidden');
+          renderer.domElement.requestPointerLock();
+          startWave();
+        }
+
+        // ---------- 初期化 ----------
+        function init() {
+          initThree();
+          setupInput();
+
+          dom.startBtn.addEventListener('click', startGame);
+          dom.restartBtn.addEventListener('click', startGame);
+          dom.resumeBtn.addEventListener('click', () => {
+            renderer.domElement.requestPointerLock();
+          });
+          dom.shopOpenBtn.addEventListener('click', () => {
+            state.shopOpenedFromHome = true;
+            renderShopUI();
+            updateCreditsUI();
+            dom.shopScreen.classList.remove('hidden');
+          });
+          dom.shopCloseBtn.addEventListener('click', closeShop);
+
+          document.addEventListener('pointerlockchange', () => {
+            if (state.pointerLocked) hidePause();
+          });
+
+          animate();
+        }
+
+        init();
+      })();
+    </script>
+  </body>
+</html>
